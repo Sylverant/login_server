@@ -231,7 +231,7 @@ static int get_ip_info() {
     return 0;
 }
 
-static void run_server(int sock) {
+static void run_server(int dcsock, int pcsock) {
     fd_set readfds, writefds, exceptfds;
     struct timeval timeout;
     int nfds;
@@ -262,16 +262,19 @@ static void run_server(int sock) {
             nfds = nfds > i->sock ? nfds : i->sock;
         }
 
-        /* Add the listening socket for incoming connections to the fd_set. */
-        FD_SET(sock, &readfds);
-        nfds = nfds > sock ? nfds : sock;
+        /* Add the listening sockets for incoming connections to the fd_set. */
+        FD_SET(dcsock, &readfds);
+        nfds = nfds > dcsock ? nfds : dcsock;
+        FD_SET(pcsock, &readfds);
+        nfds = nfds > pcsock ? nfds : pcsock;
 
         if(select(nfds + 1, &readfds, &writefds, &exceptfds, &timeout) > 0) {
             /* See if we have an incoming client. */
-            if(FD_ISSET(sock, &readfds)) {
+            if(FD_ISSET(dcsock, &readfds)) {
                 len = sizeof(struct sockaddr_in);
 
-                if((asock = accept(sock, (struct sockaddr *)&addr, &len)) < 0) {
+                if((asock = accept(dcsock, (struct sockaddr *)&addr,
+                                   &len)) < 0) {
                     perror("accept");
                 }
 
@@ -280,6 +283,23 @@ static void run_server(int sock) {
 
                 if(create_connection(asock, addr.sin_addr.s_addr,
                                      CLIENT_TYPE_DC) == NULL) {
+                    close(asock);
+                }
+            }
+
+            if(FD_ISSET(pcsock, &readfds)) {
+                len = sizeof(struct sockaddr_in);
+
+                if((asock = accept(pcsock, (struct sockaddr *)&addr,
+                                   &len)) < 0) {
+                    perror("accept");
+                }
+
+                debug(DBG_LOG, "Accepted PC connection from %s\n",
+                      inet_ntoa(addr.sin_addr));
+
+                if(create_connection(asock, addr.sin_addr.s_addr,
+                                     CLIENT_TYPE_PC) == NULL) {
                     close(asock);
                 }
             }
@@ -346,9 +366,43 @@ static void run_server(int sock) {
     }
 }
 
-int main(int argc, char *argv[]) {
-    struct sockaddr_in addr;
+static int open_sock(uint16_t port) {
     int sock = -1;
+    struct sockaddr_in addr;
+
+    /* Create the socket and listen for connections. */
+    sock = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
+
+    if(sock < 0) {
+        perror("socket");
+        sylverant_db_close(&conn);
+        return -1;
+    }
+
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = INADDR_ANY;
+    addr.sin_port = htons(port);
+    memset(addr.sin_zero, 0, 8);
+
+    if(bind(sock, (struct sockaddr *)&addr, sizeof(struct sockaddr_in))) {
+        perror("bind");
+        sylverant_db_close(&conn);
+        close(sock);
+        return -1;
+    }
+
+    if(listen(sock, 10)) {
+        perror("listen");
+        sylverant_db_close(&conn);
+        close(sock);
+        return -1;
+    }
+
+    return sock;
+}
+
+int main(int argc, char *argv[]) {
+    int dcsock, pcsock;
 
     /* Parse the command line and read our configuration. */
     parse_command_line(argc, argv);
@@ -358,40 +412,25 @@ int main(int argc, char *argv[]) {
     get_ip_info();
 
     debug(DBG_LOG, "Opening Dreamcast port (9200) for connections.\n");
+    dcsock = open_sock(9200);
 
-    /* Create the socket and listen for connections. */
-    sock = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
-
-    if(sock < 0) {
-        perror("socket");
-        sylverant_db_close(&conn);
-        return 1;
+    if(dcsock < 0) {
+        exit(EXIT_FAILURE);
     }
 
-    addr.sin_family = AF_INET;
-    addr.sin_addr.s_addr = INADDR_ANY;
-    addr.sin_port = htons(9200);
-    memset(addr.sin_zero, 0, 8);
+    debug(DBG_LOG, "Opening PC port (9300) for connections.\n");
+    pcsock = open_sock(9300);
 
-    if(bind(sock, (struct sockaddr *)&addr, sizeof(struct sockaddr_in))) {
-        perror("bind");
-        sylverant_db_close(&conn);
-        close(sock);
-        return 1;
-    }
-
-    if(listen(sock, 10)) {
-        perror("listen");
-        sylverant_db_close(&conn);
-        close(sock);
-        return 1;
+    if(pcsock < 0) {
+        exit(EXIT_FAILURE);
     }
 
     /* Run the login server. */
-    run_server(sock);
+    run_server(dcsock, pcsock);
 
     /* Clean up. */
-    close(sock);
+    close(dcsock);
+    close(pcsock);
     sylverant_db_close(&conn);
 
     return 0;

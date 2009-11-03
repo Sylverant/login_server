@@ -47,9 +47,16 @@ typedef struct dc_pkt_header {
     uint16_t pkt_len;
 } PACKED dc_pkt_header_t;
 
+typedef struct pc_pkt_header {
+    uint16_t pkt_len;
+    uint8_t pkt_type;
+    uint8_t flags;
+} PACKED pc_pkt_header_t;
+
 typedef union pkt_header {
     bb_pkt_header_t bb;
     dc_pkt_header_t dc;
+    pc_pkt_header_t pc;
 } pkt_header_t;
 
 #undef PACKED
@@ -85,6 +92,7 @@ typedef struct login_client {
 
 /* Values for the type of the login_client_t */
 #define CLIENT_TYPE_DC              0
+#define CLIENT_TYPE_PC              1
 
 /* These are not supported at the moment, but here to make it so that the code
    that was written for them still works. */
@@ -102,7 +110,7 @@ void destroy_connection(login_client_t *c);
 
 int process_login_packet(login_client_t *c, bb_pkt_header_t *hdr);
 int process_character_packet(login_client_t *c, bb_pkt_header_t *hdr);
-int process_dclogin_packet(login_client_t *c, dc_pkt_header_t *pkt);
+int process_dclogin_packet(login_client_t *c, void *pkt);
 
 int read_from_client(login_client_t *c);
 

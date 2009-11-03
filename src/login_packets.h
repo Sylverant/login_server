@@ -62,7 +62,10 @@ typedef struct bb_login_welcome {
 } PACKED bb_login_welcome_pkt;
 
 typedef struct dc_login_welcome {
-    dc_pkt_header_t hdr;
+    union {
+        dc_pkt_header_t dc;
+        pc_pkt_header_t pc;
+    } hdr;
     char copyright[0x40];
     uint32_t svect;
     uint32_t cvect;
@@ -77,9 +80,12 @@ typedef struct bb_login_ship_select {
     uint32_t shipid;
 } PACKED bb_login_ship_select_pkt;
 
-/* The ship select packet that the client sends to us (Dreamcast). */
+/* The ship select packet that the client sends to us (Dreamcast/PC). */
 typedef struct dc_login_ship_select {
-    dc_pkt_header_t hdr;
+    union {
+        dc_pkt_header_t dc;
+        pc_pkt_header_t pc;
+    } hdr;
     uint32_t menu_id;
     uint32_t item_id;
 } PACKED dc_login_ship_select_pkt;
@@ -116,9 +122,12 @@ typedef struct login_dclogin {
     uint8_t sec_data[0];
 } PACKED login_dclogin_pkt;
 
-/* The login packet that the client sends to us (Dreamcast V2). */
+/* The login packet that the client sends to us (Dreamcast V2/PC). */
 typedef struct login_dcv2login {
-    dc_pkt_header_t hdr;
+    union {
+        dc_pkt_header_t dc;
+        pc_pkt_header_t pc;
+    } hdr;
     uint8_t unused[32];
     char serial[8];
     uint8_t padding1[8];
@@ -140,9 +149,12 @@ typedef struct bb_login_redirect {
     uint8_t padding2[2];
 } PACKED bb_login_redirect_pkt;
 
-/* The packet sent to redirect clients (Dreamcast). */
+/* The packet sent to redirect clients (Dreamcast/PC). */
 typedef struct dc_login_redirect {
-    dc_pkt_header_t hdr;
+    union {
+        dc_pkt_header_t dc;
+        pc_pkt_header_t pc;
+    } hdr;
     uint32_t ip_addr;       /* Big-endian */
     uint16_t port;          /* Little-endian */
     uint8_t padding2[2];
@@ -161,9 +173,12 @@ typedef struct bb_login_timestamp {
     char timestamp[28];
 } PACKED bb_login_timestamp_pkt;
 
-/* The packet sent as a timestamp (Dreamcast). */
+/* The packet sent as a timestamp (Dreamcast/PC). */
 typedef struct dc_login_timestamp {
-    dc_pkt_header_t hdr;
+    union {
+        dc_pkt_header_t dc;
+        pc_pkt_header_t pc;
+    } hdr;
     char timestamp[28];
 } PACKED dc_login_timestamp_pkt;
 
@@ -215,9 +230,12 @@ typedef struct bb_login_security {
     uint8_t unk3[4];        /* 0x01 0x01 0x00 0x00 */
 } PACKED bb_login_security_pkt;
 
-/* The packet sent to inform clients of their security data (Dreamcast). */
+/* The packet sent to inform clients of their security data (Dreamcast/PC). */
 typedef struct dc_login_security {
-    dc_pkt_header_t hdr;
+    union {
+        dc_pkt_header_t dc;
+        pc_pkt_header_t pc;
+    } hdr;
     uint32_t tag;
     uint32_t guildcard;
     uint8_t security_data[0];
@@ -243,9 +261,12 @@ typedef struct login_scrollmsg {
     uint8_t msg[];
 } PACKED login_scroll_msg_pkt;
 
-/* The packet used for the information reply on the Dreamcast version. */
+/* The packet used for the information reply on the Dreamcast/PC version. */
 typedef struct dc_login_info_reply {
-    dc_pkt_header_t hdr;
+    union {
+        dc_pkt_header_t dc;
+        pc_pkt_header_t pc;
+    } hdr;
     uint32_t odd[2];
     char msg[];
 } PACKED dc_login_info_reply_pkt;
@@ -283,6 +304,17 @@ typedef struct dc_login_ship_list {
         char name[0x12];
     } entries[0];
 } PACKED dc_login_ship_list_pkt;
+
+/* The ship list packet send to tell clients what ships are up (PC). */
+typedef struct pc_login_ship_list {
+    pc_pkt_header_t hdr;    /* The flags field says how entries are below */
+    struct {
+        uint32_t menu_id;
+        uint32_t item_id;
+        uint16_t flags;
+        uint16_t name[0x11];
+    } entries[0];
+} PACKED pc_login_ship_list_pkt;
 
 /* The ship information request packet the client sends. */
 typedef struct login_info_req {

@@ -120,6 +120,7 @@ int send_bb_welcome(login_client_t *c, uint8_t svect[48], uint8_t cvect[48]) {
     return send_raw(c, LOGIN_BB_WELCOME_LENGTH);
 }
 
+/* Send a Dreamcast/PC Welcome packet to the given client. */
 int send_dc_welcome(login_client_t *c, uint32_t svect, uint32_t cvect) {
     dc_login_welcome_pkt *pkt = (dc_login_welcome_pkt *)sendbuf;
 
@@ -127,8 +128,14 @@ int send_dc_welcome(login_client_t *c, uint32_t svect, uint32_t cvect) {
     memset(pkt, 0, sizeof(dc_login_welcome_pkt));
 
     /* Fill in the header */
-    pkt->hdr.pkt_len = LE16(LOGIN_DC_WELCOME_LENGTH);
-    pkt->hdr.pkt_type = LOGIN_DC_WELCOME_TYPE;
+    if(c->type == CLIENT_TYPE_DC) {
+        pkt->hdr.dc.pkt_len = LE16(LOGIN_DC_WELCOME_LENGTH);
+        pkt->hdr.dc.pkt_type = LOGIN_DC_WELCOME_TYPE;
+    }
+    else {
+        pkt->hdr.pc.pkt_len = LE16(LOGIN_DC_WELCOME_LENGTH);
+        pkt->hdr.pc.pkt_type = LOGIN_DC_WELCOME_TYPE;
+    }
 
     /* Fill in the required message */
     memcpy(pkt->copyright, login_dc_welcome_copyright, 52);
@@ -185,8 +192,14 @@ int send_dc_security(login_client_t *c, uint32_t gc, uint8_t *data,
     memset(pkt, 0, sizeof(dc_login_security_pkt));
 
     /* Fill in the header */
-    pkt->hdr.pkt_type = LOGIN_DC_SECURITY_TYPE;
-    pkt->hdr.pkt_len = LE16((0x0C + data_len));
+    if(c->type == CLIENT_TYPE_DC) {
+        pkt->hdr.dc.pkt_type = LOGIN_DC_SECURITY_TYPE;
+        pkt->hdr.dc.pkt_len = LE16((0x0C + data_len));
+    }
+    else {
+        pkt->hdr.pc.pkt_type = LOGIN_DC_SECURITY_TYPE;
+        pkt->hdr.pc.pkt_len = LE16((0x0C + data_len));
+    }
 
     /* Fill in the guildcard/tag */
     pkt->tag = LE32(0x00010000);
@@ -227,8 +240,14 @@ static int send_redirect_dc(login_client_t *c, in_addr_t ip, uint16_t port) {
     memset(pkt, 0, LOGIN_DC_REDIRECT_LENGTH);
 
     /* Fill in the header */
-    pkt->hdr.pkt_type = LOGIN_REDIRECT_TYPE;
-    pkt->hdr.pkt_len = LE16(LOGIN_DC_REDIRECT_LENGTH);
+    if(c->type == CLIENT_TYPE_DC) {
+        pkt->hdr.dc.pkt_type = LOGIN_REDIRECT_TYPE;
+        pkt->hdr.dc.pkt_len = LE16(LOGIN_DC_REDIRECT_LENGTH);
+    }
+    else {
+        pkt->hdr.pc.pkt_type = LOGIN_REDIRECT_TYPE;
+        pkt->hdr.pc.pkt_len = LE16(LOGIN_DC_REDIRECT_LENGTH);
+    }
 
     /* Fill in the IP and port */
     pkt->ip_addr = ip;
@@ -246,6 +265,7 @@ int send_redirect(login_client_t *c, in_addr_t ip, uint16_t port) {
             return send_redirect_bb(c, ip, port);
 
         case CLIENT_TYPE_DC:
+        case CLIENT_TYPE_PC:
             return send_redirect_dc(c, ip, port);
     }
 
@@ -290,8 +310,14 @@ static int send_timestamp_dc(login_client_t *c) {
     memset(pkt, 0, LOGIN_DC_TIMESTAMP_LENGTH);
 
     /* Fill in the header */
-    pkt->hdr.pkt_type = LOGIN_TIMESTAMP_TYPE;
-    pkt->hdr.pkt_len = LE16(LOGIN_DC_TIMESTAMP_LENGTH);
+    if(c->type == CLIENT_TYPE_DC) {
+        pkt->hdr.dc.pkt_type = LOGIN_TIMESTAMP_TYPE;
+        pkt->hdr.dc.pkt_len = LE16(LOGIN_DC_TIMESTAMP_LENGTH);
+    }
+    else {
+        pkt->hdr.pc.pkt_type = LOGIN_TIMESTAMP_TYPE;
+        pkt->hdr.pc.pkt_len = LE16(LOGIN_DC_TIMESTAMP_LENGTH);
+    }
 
     /* Get the timestamp */
     gettimeofday(&rawtime, NULL);
@@ -317,6 +343,7 @@ int send_timestamp(login_client_t *c) {
             return send_timestamp_bb(c);
 
         case CLIENT_TYPE_DC:
+        case CLIENT_TYPE_PC:
             return send_timestamp_dc(c);
     }
 
@@ -662,6 +689,117 @@ out:
     return i;
 }
 
+/* Send the list of ships to the client. */
+static int send_ship_list_pc(login_client_t *c) {
+    pc_login_ship_list_pkt *pkt = (pc_login_ship_list_pkt *)sendbuf;
+    char no_ship_msg[] = "No Ships";
+    char query[256], tmp[18];
+    uint32_t num_ships = 0;
+    void *result;
+    char **row;
+    uint32_t ship_id, players;
+    int i, len = 0x30;
+    iconv_t ic = iconv_open("UTF-16LE", "SHIFT_JIS");
+    size_t in, out;
+    char *inptr, *outptr;
+
+    if(ic == (iconv_t)-1) {
+        perror("iconv_open");
+        return -1;
+    }
+
+    /* Clear the base packet */
+    memset(pkt, 0, sizeof(dc_login_ship_list_pkt));
+
+    /* Fill in some basic stuff */
+    pkt->hdr.pkt_type = LOGIN_DC_SHIP_LIST_TYPE;
+
+    /* Fill in the "DATABASE/JP" entry */
+    memset(&pkt->entries[0], 0, 0x2C);
+    pkt->entries[0].menu_id = LE32(0x00040000);
+    pkt->entries[0].item_id = 0;
+    pkt->entries[0].flags = LE16(0x0004);
+    memcpy(pkt->entries[0].name, "D\0A\0T\0A\0B\0A\0S\0E\0/\0J\0P\0", 22);
+    num_ships = 1;
+
+    /* Get ready to query the database */
+    sprintf(query, "SELECT ship_id, name, players FROM online_ships");
+
+    /* Query the database and see what we've got */
+    if(sylverant_db_query(&conn, query)) {
+        i = -1;
+        goto out;
+    }
+
+    if((result = sylverant_db_result_store(&conn)) == NULL) {
+        i = -2;
+        goto out;
+    }
+
+    /* As long as we have some rows, go */
+    while((row = sylverant_db_result_fetch(result))) {
+        /* Clear out the ship information */
+        memset(&pkt->entries[num_ships], 0, 0x2C);
+
+        /* Grab info from the row */
+        ship_id = (uint32_t)strtoul(row[0], NULL, 0);
+        players = (uint32_t)strtoul(row[2], NULL, 0);
+
+        /* Fill in what we have */
+        pkt->entries[num_ships].menu_id = LE32(0x00120000);
+        pkt->entries[num_ships].item_id = LE32(ship_id);
+        pkt->entries[num_ships].flags = LE16(0x0000);
+
+        /* Create the name string (ASCII) */
+        sprintf(tmp, "%s (%d)", row[1], players);
+
+        /* And convert to UTF16 */
+        in = strlen(tmp);
+        out = 0x22;
+        inptr = tmp;
+        outptr = pkt->entries[num_ships].name;
+        iconv(ic, &inptr, &in, &outptr, &out);
+
+        /* We're done with this ship, increment the counter */
+        ++num_ships;
+        len += 0x2C;
+    }
+
+    sylverant_db_result_free(result);
+
+    /* Make sure we have at least one ship... */
+    if(num_ships == 1) {
+        /* Clear out the ship information */
+        memset(&pkt->entries[num_ships], 0, 0x2C);
+        pkt->entries[num_ships].menu_id = LE32(0xFFFFFFFF);
+        pkt->entries[num_ships].item_id = LE32(0x00000000);
+        pkt->entries[num_ships].flags = LE16(0x0000);
+
+        /* And convert to UTF16 */
+        in = strlen(no_ship_msg);
+        out = 0x22;
+        inptr = no_ship_msg;
+        outptr = pkt->entries[num_ships].name;
+        iconv(ic, &inptr, &in, &outptr, &out);
+
+        ++num_ships;
+        len += 0x2C;
+    }
+
+    /* Fill in the rest of the header */
+    pkt->hdr.pkt_len = LE16(len);
+    pkt->hdr.flags = (uint8_t)(num_ships - 1);
+
+    /* Send the packet away */
+    iconv_close(ic);
+
+    return crypt_send(c, len);
+
+out:
+    iconv_close(ic);
+    return i;
+}
+
 int send_ship_list(login_client_t *c) {
     /* Call the appropriate function */
     switch(c->type) {
@@ -670,6 +808,9 @@ int send_ship_list(login_client_t *c) {
 
         case CLIENT_TYPE_DC:
             return send_ship_list_dc(c);
+
+        case CLIENT_TYPE_PC:
+            return send_ship_list_pc(c);
     }
 
     return -1;
@@ -708,16 +849,23 @@ static int send_info_reply_bb(login_client_t *c, char msg[]) {
 
 static int send_info_reply_dc(login_client_t *c, char msg[]) {
     dc_login_info_reply_pkt *pkt = (dc_login_info_reply_pkt *)sendbuf;
-    iconv_t ic = iconv_open("SHIFT_JIS", "ASCII");
+    iconv_t ic;
     size_t in, out;
     char *inptr, *outptr;
-    
+
+    if(c->type == CLIENT_TYPE_DC) {
+        ic = iconv_open("SHIFT_JIS", "SHIFT_JIS");
+    }
+    else {
+        ic = iconv_open("UTF-16LE", "SHIFT_JIS");
+    }
+
     if(ic == (iconv_t)-1) {
         perror("iconv_open");
         return -1;
     }
 
-    /* Convert the message to Shift-JIS */
+    /* Convert the message to the appropriate encoding. */
     in = strlen(msg);
     out = 65524;
     inptr = msg;
@@ -738,9 +886,16 @@ static int send_info_reply_dc(login_client_t *c, char msg[]) {
     }
 
     /* Fill in the header */
-    pkt->hdr.pkt_type = LOGIN_INFO_REPLY_TYPE;
-    pkt->hdr.flags = 0;
-    pkt->hdr.pkt_len = LE16(out);
+    if(c->type == CLIENT_TYPE_DC) {
+        pkt->hdr.dc.pkt_type = LOGIN_INFO_REPLY_TYPE;
+        pkt->hdr.dc.flags = 0;
+        pkt->hdr.dc.pkt_len = LE16(out);
+    }
+    else {
+        pkt->hdr.pc.pkt_type = LOGIN_INFO_REPLY_TYPE;
+        pkt->hdr.pc.flags = 0;
+        pkt->hdr.pc.pkt_len = LE16(out);
+    }
 
     /* Send the packet away */
     return crypt_send(c, out);
@@ -753,6 +908,7 @@ int send_info_reply(login_client_t *c, char msg[]) {
             return send_info_reply_bb(c, msg);
 
         case CLIENT_TYPE_DC:
+        case CLIENT_TYPE_PC:
             return send_info_reply_dc(c, msg);
     }
 
@@ -772,11 +928,26 @@ static int send_simple_dc(login_client_t *c, int type, int flags) {
     return crypt_send(c, 4);
 }
 
+static int send_simple_pc(login_client_t *c, int type, int flags) {
+    pc_pkt_header_t *pkt = (pc_pkt_header_t *)sendbuf;
+
+    /* Fill in the header */
+    pkt->pkt_type = (uint8_t)type;
+    pkt->flags = (uint8_t)flags;
+    pkt->pkt_len = LE16(4);
+
+    /* Send the packet away */
+    return crypt_send(c, 4);
+}
+
 int send_simple(login_client_t *c, int type, int flags) {
     /* Call the appropriate function. */
     switch(c->type) {
         case CLIENT_TYPE_DC:
             return send_simple_dc(c, type, flags);
+
+        case CLIENT_TYPE_PC:
+            return send_simple_pc(c, type, flags);
     }
 
     return -1;

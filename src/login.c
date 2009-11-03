@@ -51,6 +51,7 @@ login_client_t *create_connection(int sock, in_addr_t ip, int type) {
 
     switch(type) {
         case CLIENT_TYPE_DC:
+        case CLIENT_TYPE_PC:
             /* Generate the encryption keys for the client and server. */
             client_seed_dc = genrand_int32();
             server_seed_dc = genrand_int32();
@@ -142,6 +143,10 @@ int read_from_client(login_client_t *c) {
                 case CLIENT_TYPE_DC:
                     pkt_sz = LE16(c->pkt.dc.pkt_len);
                     break;
+
+                case CLIENT_TYPE_PC:
+                    pkt_sz = LE16(c->pkt.pc.pkt_len);
+                    break;
             }
 
             /* We'll always need a multiple of 8 or 4 (depending on the type of
@@ -160,7 +165,8 @@ int read_from_client(login_client_t *c) {
                 /* Pass it onto the correct handler. */
                 switch(c->type) {
                     case CLIENT_TYPE_DC:
-                        rv = process_dclogin_packet(c, (dc_pkt_header_t *)rbp);
+                    case CLIENT_TYPE_PC:
+                        rv = process_dclogin_packet(c, rbp);
                         break;
                 }
 

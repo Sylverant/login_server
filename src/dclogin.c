@@ -136,10 +136,19 @@ static int handle_ship_select(login_client_t *c,
 }
 
 /* Process one login packet. */
-int process_dclogin_packet(login_client_t *c, dc_pkt_header_t *pkt) {
-    uint8_t type = pkt->pkt_type;
+int process_dclogin_packet(login_client_t *c, void *pkt) {
+    dc_pkt_header_t *dc = (dc_pkt_header_t *)pkt;
+    pc_pkt_header_t *pc = (pc_pkt_header_t *)pkt;
+    uint8_t type;
 
-    debug(DBG_LOG, "DC: Receieved type 0x%02X\n", type);
+    if(c->type == CLIENT_TYPE_DC) {
+        type = dc->pkt_type;
+    }
+    else {
+        type = pc->pkt_type;
+    }
+
+    debug(DBG_LOG, "DC/PC: Receieved type 0x%02X\n", type);
 
     switch(type) {
         case LOGIN_DC_LOGIN0_TYPE:
