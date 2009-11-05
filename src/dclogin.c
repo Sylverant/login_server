@@ -31,10 +31,14 @@ static int handle_login(login_client_t *c, login_dclogin_pkt *pkt) {
     void *result;
     char **row;
 
+    /* Escape all the important strings. */
     sylverant_db_escape_str(&conn, dc_id, pkt->dc_id, 8);
+    sylverant_db_escape_str(&conn, serial, pkt->serial, 8);
+    sylverant_db_escape_str(&conn, access, pkt->access_key, 8);
 
-    sprintf(query, "SELECT guildcard FROM dreamcast_clients WHERE dc_id='%s'",
-            dc_id);
+    sprintf(query, "SELECT guildcard FROM dreamcast_clients WHERE dc_id='%s' "
+            "AND serial_number='%s' AND access_key='%s'", dc_id, serial,
+            access);
 
     /* If we can't query the database, fail. */
     if(sylverant_db_query(&conn, query)) {
@@ -57,10 +61,6 @@ static int handle_login(login_client_t *c, login_dclogin_pkt *pkt) {
 
         /* Grab the new guildcard for the user. */
         gc = (uint32_t)sylverant_db_insert_id(&conn);
-
-        /* Escape the strings we haven't yet escaped. */
-        sylverant_db_escape_str(&conn, serial, pkt->serial, 8);
-        sylverant_db_escape_str(&conn, access, pkt->access_key, 8);
 
         /* Add the client into our database. */
         sprintf(query, "INSERT INTO dreamcast_clients (guildcard, "
@@ -83,10 +83,20 @@ static int handle_v2login(login_client_t *c, login_dcv2login_pkt *pkt) {
     void *result;
     char **row;
 
+    /* Escape all the important strings. */
     sylverant_db_escape_str(&conn, dc_id, pkt->dc_id, 8);
+    sylverant_db_escape_str(&conn, serial, pkt->serial, 8);
+    sylverant_db_escape_str(&conn, access, pkt->access_key, 8);
 
-    sprintf(query, "SELECT guildcard FROM dreamcast_clients WHERE dc_id='%s'",
-            dc_id);
+    if(c->type != CLIENT_TYPE_PC) {
+        sprintf(query, "SELECT guildcard FROM dreamcast_clients WHERE "
+                "dc_id='%s' AND serial_number='%s' AND access_key='%s'", dc_id,
+                serial, access);
+    }
+    else {
+        sprintf(query, "SELECT guildcard FROM dreamcast_clients WHERE "
+                "serial_number='%s' AND access_key='%s'", serial, access);
+    }
 
     /* If we can't query the database, fail. */
     if(sylverant_db_query(&conn, query)) {
@@ -99,6 +109,34 @@ static int handle_v2login(login_client_t *c, login_dcv2login_pkt *pkt) {
         /* We have seen this client before, save their guildcard for use. */
         gc = (uint32_t)strtoul(row[0], NULL, 0);
     }
+    else if(c->type == CLIENT_TYPE_PC) {
+        sprintf(query, "SELECT guildcard FROM dreamcast_clients WHERE "
+                "access_key='%s' AND serial_number='0'", access);
+
+        /* If we can't query the database, fail. */
+        if(sylverant_db_query(&conn, query)) {
+            return -1;
+        }
+
+        result = sylverant_db_result_store(&conn);
+
+        if((row = sylverant_db_result_fetch(result))) {
+            /* We have seen this client before, save their guildcard for
+               use and set the serial number. */
+            gc = (uint32_t)strtoul(row[0], NULL, 0);
+
+            sprintf(query, "UPDATE dreamcast_clients SET serial_number='%s' "
+                    "WHERE guildcard='%u'", serial, gc);
+
+            if(sylverant_db_query(&conn, query)) {
+                return -1;
+            }
+        }
+        else {
+            /* Disconnect the unregistered user. */
+            return -1;
+        }
+    }
     else {
         /* Assign a nice fresh new guildcard number to the client. */
         sprintf(query, "INSERT INTO guildcards (account_id) VALUES (NULL)");
@@ -109,10 +147,6 @@ static int handle_v2login(login_client_t *c, login_dcv2login_pkt *pkt) {
 
         /* Grab the new guildcard for the user. */
         gc = (uint32_t)sylverant_db_insert_id(&conn);
-
-        /* Escape the strings we haven't yet escaped. */
-        sylverant_db_escape_str(&conn, serial, pkt->serial, 8);
-        sylverant_db_escape_str(&conn, access, pkt->access_key, 8);
 
         /* Add the client into our database. */
         sprintf(query, "INSERT INTO dreamcast_clients (guildcard, "

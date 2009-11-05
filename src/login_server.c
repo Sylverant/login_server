@@ -171,6 +171,12 @@ int ship_transfer(login_client_t *c, uint32_t shipid) {
     /* They should be on different networks if we get here,
        send the external IP. */
 
+    /* If the client is on the PC version, connect to the PC version port,
+       rather than the one for the DC version. */
+    if(c->type == CLIENT_TYPE_PC) {
+        ++port;
+    }
+
     return send_redirect(c, ip, port);
 }
 
