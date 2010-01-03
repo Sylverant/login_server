@@ -17,6 +17,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include <sylverant/debug.h>
 #include <sylverant/database.h>
@@ -50,8 +51,11 @@ static int handle_login(login_client_t *c, login_dclogin_pkt *pkt) {
     if((row = sylverant_db_result_fetch(result))) {
         /* We have seen this client before, save their guildcard for use. */
         gc = (uint32_t)strtoul(row[0], NULL, 0);
+        sylverant_db_result_free(result);
     }
     else {
+        sylverant_db_result_free(result);
+
         /* Assign a nice fresh new guildcard number to the client. */
         sprintf(query, "INSERT INTO guildcards (account_id) VALUES (NULL)");
 
@@ -108,6 +112,7 @@ static int handle_v2login(login_client_t *c, login_dcv2login_pkt *pkt) {
     if((row = sylverant_db_result_fetch(result))) {
         /* We have seen this client before, save their guildcard for use. */
         gc = (uint32_t)strtoul(row[0], NULL, 0);
+        sylverant_db_result_free(result);
     }
     else if(c->type == CLIENT_TYPE_PC) {
         sprintf(query, "SELECT guildcard FROM dreamcast_clients WHERE "
@@ -124,6 +129,7 @@ static int handle_v2login(login_client_t *c, login_dcv2login_pkt *pkt) {
             /* We have seen this client before, save their guildcard for
                use and set the serial number. */
             gc = (uint32_t)strtoul(row[0], NULL, 0);
+            sylverant_db_result_free(result);
 
             sprintf(query, "UPDATE dreamcast_clients SET serial_number='%s' "
                     "WHERE guildcard='%u'", serial, gc);
@@ -138,6 +144,8 @@ static int handle_v2login(login_client_t *c, login_dcv2login_pkt *pkt) {
         }
     }
     else {
+        sylverant_db_result_free(result);
+
         /* Assign a nice fresh new guildcard number to the client. */
         sprintf(query, "INSERT INTO guildcards (account_id) VALUES (NULL)");
 
@@ -161,6 +169,206 @@ static int handle_v2login(login_client_t *c, login_dcv2login_pkt *pkt) {
     return send_dc_security(c, gc, NULL, 0);
 }
 
+/* The next few functions look the same pretty much... All added for gamecube
+   support. */
+static int handle_gchlcheck(login_client_t *c, login_gc_hlcheck_pkt *pkt) {
+    uint32_t account, time, gc;
+    char query[256], serial[32], access[32];
+    void *result;
+    char **row;
+    unsigned char hash[16];
+    int i;
+
+    /* Escape all the important strings. */
+    sylverant_db_escape_str(&conn, serial, pkt->serial, 8);
+    sylverant_db_escape_str(&conn, access, pkt->access_key, 12);
+
+    sprintf(query, "SELECT guildcard FROM gamecube_clients WHERE "
+            "serial_number='%s' AND access_key='%s'", serial, access);
+
+    /* If we can't query the database, fail. */
+    if(sylverant_db_query(&conn, query)) {
+        return -1;
+    }
+
+    result = sylverant_db_result_store(&conn);
+
+    if((row = sylverant_db_result_fetch(result))) {
+        /* The client has at least registered, check the password. */
+        gc = (uint32_t)strtoul(row[0], NULL, 0);
+
+        sylverant_db_result_free(result);
+
+        /* We need the account to do that though... */
+        sprintf(query, "SELECT account_id FROM guildcards WHERE guildcard='%u'",
+                gc);
+
+        if(sylverant_db_query(&conn, query)) {
+            return -1;
+        }
+
+        result = sylverant_db_result_store(&conn);
+
+        if(!(row = sylverant_db_result_fetch(result))) {
+            return -1;
+        }
+
+        account = (uint32_t)strtoul(row[0], NULL, 0);
+        sylverant_db_result_free(result);
+
+        sprintf(query, "SELECT password, regtime FROM account_data WHERE "
+                "account_id='%u'", account);
+
+        /* If we can't query the DB, fail. */
+        if(sylverant_db_query(&conn, query)) {
+            return -1;
+        }
+
+        result = sylverant_db_result_store(&conn);
+
+        if((row = sylverant_db_result_fetch(result))) {
+            /* Check the password. */
+            sprintf(query, "%s_%s_salt", pkt->password, row[1]);
+            md5(query, strlen(query), hash);
+
+            query[0] = '\0';
+            for(i = 0; i < 16; ++i) {
+                sprintf(query, "%s%02x", query, hash[i]);
+            }
+
+            for(i = 0; i < strlen(row[0]); ++i) {
+                row[0][i] = tolower(row[0][i]);
+            }
+
+            if(!strcmp(row[0], query)) {
+                sylverant_db_result_free(result);
+                return send_simple(c, LOGIN_DCV2_LOGINA_TYPE, 1);
+            }
+        }
+    }
+
+    sylverant_db_result_free(result);
+
+    /* If we get here, we didn't find them, bail out. */
+    return -1;
+}
+
+static int handle_gcloginc(login_client_t *c, login_gc_loginc_pkt *pkt) {
+    uint32_t account, time, gc;
+    char query[256], serial[32], access[32];
+    void *result;
+    char **row;
+    unsigned char hash[16];
+    int i;
+
+    /* Escape all the important strings. */
+    sylverant_db_escape_str(&conn, serial, pkt->serial, 8);
+    sylverant_db_escape_str(&conn, access, pkt->access_key, 12);
+
+    sprintf(query, "SELECT guildcard FROM gamecube_clients WHERE "
+            "serial_number='%s' AND access_key='%s'", serial, access);
+
+    /* If we can't query the database, fail. */
+    if(sylverant_db_query(&conn, query)) {
+        return -1;
+    }
+
+    result = sylverant_db_result_store(&conn);
+
+    if((row = sylverant_db_result_fetch(result))) {
+        /* The client has at least registered, check the password. */
+        gc = (uint32_t)strtoul(row[0], NULL, 0);
+
+        sylverant_db_result_free(result);
+
+        /* We need the account to do that though... */
+        sprintf(query, "SELECT account_id FROM guildcards WHERE guildcard='%u'",
+                gc);
+
+        if(sylverant_db_query(&conn, query)) {
+            return -1;
+        }
+
+        result = sylverant_db_result_store(&conn);
+
+        if(!(row = sylverant_db_result_fetch(result))) {
+            return -1;
+        }
+
+        account = (uint32_t)strtoul(row[0], NULL, 0);
+        sylverant_db_result_free(result);
+
+        sprintf(query, "SELECT password, regtime FROM account_data WHERE "
+                "account_id='%u'", account);
+
+        /* If we can't query the DB, fail. */
+        if(sylverant_db_query(&conn, query)) {
+            return -1;
+        }
+
+        result = sylverant_db_result_store(&conn);
+
+        if((row = sylverant_db_result_fetch(result))) {
+            /* Check the password. */
+            sprintf(query, "%s_%s_salt", pkt->password, row[1]);
+            md5(query, strlen(query), hash);
+
+            query[0] = '\0';
+            for(i = 0; i < 16; ++i) {
+                sprintf(query, "%s%02x", query, hash[i]);
+            }
+
+            for(i = 0; i < strlen(row[0]); ++i) {
+                row[0][i] = tolower(row[0][i]);
+            }
+
+            if(!strcmp(row[0], query)) {
+                sylverant_db_result_free(result);
+                return send_simple(c, LOGIN_GC_LOGINC_TYPE, 1);
+            }
+        }
+    }
+
+    sylverant_db_result_free(result);
+
+    /* If we get here, we didn't find them, bail out. */
+    return -1;
+}
+
+static int handle_gclogine(login_client_t *c, login_gc_logine_pkt *pkt) {
+    uint32_t gc;
+    char query[256], serial[32], access[32];
+    void *result;
+    char **row;
+
+    /* Escape all the important strings. */
+    sylverant_db_escape_str(&conn, serial, pkt->serial, 8);
+    sylverant_db_escape_str(&conn, access, pkt->access_key, 12);
+
+    sprintf(query, "SELECT guildcard FROM gamecube_clients WHERE "
+            "serial_number='%s' AND access_key='%s'", serial, access);
+
+    /* If we can't query the database, fail. */
+    if(sylverant_db_query(&conn, query)) {
+        return -1;
+    }
+
+    result = sylverant_db_result_store(&conn);
+
+    if((row = sylverant_db_result_fetch(result))) {
+        /* The client has at least registered, check the password. */
+        gc = (uint32_t)strtoul(row[0], NULL, 0);
+        sylverant_db_result_free(result);
+
+        return send_dc_security(c, gc, NULL, 0);
+    }
+
+    sylverant_db_result_free(result);
+
+    /* If we get here, we didn't find them, bail out. */
+    return -1;
+}
+
 /* Handle a client's ship select packet. */
 static int handle_ship_select(login_client_t *c,
                               dc_login_ship_select_pkt *pkt) {
@@ -175,14 +383,14 @@ int process_dclogin_packet(login_client_t *c, void *pkt) {
     pc_pkt_header_t *pc = (pc_pkt_header_t *)pkt;
     uint8_t type;
 
-    if(c->type == CLIENT_TYPE_DC) {
+    if(c->type == CLIENT_TYPE_DC || c->type == CLIENT_TYPE_GC) {
         type = dc->pkt_type;
     }
     else {
         type = pc->pkt_type;
     }
 
-    debug(DBG_LOG, "DC/PC: Receieved type 0x%02X\n", type);
+    debug(DBG_LOG, "DC/PC/GC: Receieved type 0x%02X\n", type);
 
     switch(type) {
         case LOGIN_DC_LOGIN0_TYPE:
@@ -221,6 +429,18 @@ int process_dclogin_packet(login_client_t *c, void *pkt) {
         case LOGIN_SHIP_SELECT_TYPE:
             /* XXXX: This might actually work, at least if there's a ship. */
             return handle_ship_select(c, (dc_login_ship_select_pkt *)pkt);
+
+        case LOGIN_GC_VERIFY_LICENSE_TYPE:
+            /* XXXX: Why in the world do they duplicate so much data here? */
+            return handle_gchlcheck(c, (login_gc_hlcheck_pkt *)pkt);
+
+        case LOGIN_GC_LOGINC_TYPE:
+            /* XXXX: Yep... check things here too. */
+            return handle_gcloginc(c, (login_gc_loginc_pkt *)pkt);
+
+        case LOGIN_GC_LOGINE_TYPE:
+            /* XXXX: One final check, and give them their guildcard. */
+            return handle_gclogine(c, (login_gc_logine_pkt *)pkt);
 
         default:
             return -3;

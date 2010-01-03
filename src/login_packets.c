@@ -128,7 +128,7 @@ int send_dc_welcome(login_client_t *c, uint32_t svect, uint32_t cvect) {
     memset(pkt, 0, sizeof(dc_login_welcome_pkt));
 
     /* Fill in the header */
-    if(c->type == CLIENT_TYPE_DC) {
+    if(c->type == CLIENT_TYPE_DC || c->type == CLIENT_TYPE_GC) {
         pkt->hdr.dc.pkt_len = LE16(LOGIN_DC_WELCOME_LENGTH);
         pkt->hdr.dc.pkt_type = LOGIN_DC_WELCOME_TYPE;
     }
@@ -192,7 +192,7 @@ int send_dc_security(login_client_t *c, uint32_t gc, uint8_t *data,
     memset(pkt, 0, sizeof(dc_login_security_pkt));
 
     /* Fill in the header */
-    if(c->type == CLIENT_TYPE_DC) {
+    if(c->type == CLIENT_TYPE_DC || c->type == CLIENT_TYPE_GC) {
         pkt->hdr.dc.pkt_type = LOGIN_DC_SECURITY_TYPE;
         pkt->hdr.dc.pkt_len = LE16((0x0C + data_len));
     }
@@ -240,7 +240,7 @@ static int send_redirect_dc(login_client_t *c, in_addr_t ip, uint16_t port) {
     memset(pkt, 0, LOGIN_DC_REDIRECT_LENGTH);
 
     /* Fill in the header */
-    if(c->type == CLIENT_TYPE_DC) {
+    if(c->type == CLIENT_TYPE_DC || c->type == CLIENT_TYPE_GC) {
         pkt->hdr.dc.pkt_type = LOGIN_REDIRECT_TYPE;
         pkt->hdr.dc.pkt_len = LE16(LOGIN_DC_REDIRECT_LENGTH);
     }
@@ -270,6 +270,31 @@ int send_redirect(login_client_t *c, in_addr_t ip, uint16_t port) {
     }
 
     return -1;
+}
+
+/* Send the packet to clients that will help sort out PSOGC versus PSOPC
+   users. */
+int send_selective_redirect(login_client_t *c, in_addr_t ip, uint16_t port) {
+    dc_login_redirect_pkt *pkt = (dc_login_redirect_pkt *)sendbuf;
+
+    /* Verify we got the sendbuf. */
+    if(!sendbuf) {
+        return -1;
+    }
+
+    /* Wipe the packet */
+    memset(pkt, 0, 0xB0);
+
+    /* Fill in the header */
+    pkt->hdr.dc.pkt_type = LOGIN_REDIRECT_TYPE;
+    pkt->hdr.dc.pkt_len = LE16(0xB0);
+
+    /* Fill in the IP and port */
+    pkt->ip_addr = ip;
+    pkt->port = LE16(port);
+
+    /* Send the packet away */
+    return send_raw(c, 0xB0);
 }
 
 /* Send a timestamp packet to the given client. */
@@ -310,7 +335,7 @@ static int send_timestamp_dc(login_client_t *c) {
     memset(pkt, 0, LOGIN_DC_TIMESTAMP_LENGTH);
 
     /* Fill in the header */
-    if(c->type == CLIENT_TYPE_DC) {
+    if(c->type == CLIENT_TYPE_DC || c->type == CLIENT_TYPE_GC) {
         pkt->hdr.dc.pkt_type = LOGIN_TIMESTAMP_TYPE;
         pkt->hdr.dc.pkt_len = LE16(LOGIN_DC_TIMESTAMP_LENGTH);
     }
@@ -344,6 +369,7 @@ int send_timestamp(login_client_t *c) {
 
         case CLIENT_TYPE_DC:
         case CLIENT_TYPE_PC:
+        case CLIENT_TYPE_GC:
             return send_timestamp_dc(c);
     }
 
@@ -807,6 +833,7 @@ int send_ship_list(login_client_t *c) {
             return send_ship_list_bb(c);
 
         case CLIENT_TYPE_DC:
+        case CLIENT_TYPE_GC:
             return send_ship_list_dc(c);
 
         case CLIENT_TYPE_PC:
@@ -853,7 +880,7 @@ static int send_info_reply_dc(login_client_t *c, char msg[]) {
     size_t in, out;
     char *inptr, *outptr;
 
-    if(c->type == CLIENT_TYPE_DC) {
+    if(c->type == CLIENT_TYPE_DC || c->type == CLIENT_TYPE_GC) {
         ic = iconv_open("SHIFT_JIS", "SHIFT_JIS");
     }
     else {
@@ -909,6 +936,7 @@ int send_info_reply(login_client_t *c, char msg[]) {
 
         case CLIENT_TYPE_DC:
         case CLIENT_TYPE_PC:
+        case CLIENT_TYPE_GC:
             return send_info_reply_dc(c, msg);
     }
 
@@ -944,6 +972,7 @@ int send_simple(login_client_t *c, int type, int flags) {
     /* Call the appropriate function. */
     switch(c->type) {
         case CLIENT_TYPE_DC:
+        case CLIENT_TYPE_GC:
             return send_simple_dc(c, type, flags);
 
         case CLIENT_TYPE_PC:

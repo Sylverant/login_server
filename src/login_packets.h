@@ -325,6 +325,62 @@ typedef struct login_info_req {
     uint32_t ship_id;
 } PACKED login_info_req_pkt;
 
+/* The packet to verify that a hunter's license has been procured. */
+typedef struct login_gc_hlcheck {
+    dc_pkt_header_t hdr;
+    uint8_t padding1[32];
+    char serial[8];
+    uint8_t padding2[8];
+    char access_key[12];
+    uint8_t padding3[12];
+    uint8_t version;
+    uint8_t padding4[3];
+    char serial2[8];
+    uint8_t padding5[40];
+    char access_key2[12];
+    uint8_t padding6[36];
+    char password[16];
+    uint8_t padding7[32];
+} PACKED login_gc_hlcheck_pkt;
+
+/* One of the login packets sent by PSOGC. */
+typedef struct login_gc_loginc {
+    dc_pkt_header_t hdr;
+    uint8_t padding1[8];
+    uint8_t version;
+    uint8_t padding2[4];
+    uint8_t one;            /* 0x01 */
+    uint8_t padding3[2];
+    char serial[8];
+    uint8_t padding4[40];
+    char access_key[12];
+    uint8_t padding5[36];
+    char password[16];
+    uint8_t padding6[32];
+} PACKED login_gc_loginc_pkt;
+
+/* The other login packet sent by PSOGC. */
+typedef struct login_gc_logine {
+    dc_pkt_header_t hdr;
+    uint8_t padding1[2];
+    uint8_t ffffffffffff[6];
+    uint8_t padding2[8];
+    uint8_t version;
+    uint8_t padding3[4];
+    uint8_t one;            /* 0x01 */
+    uint8_t padding4[34];
+    char serial[8];
+    uint8_t padding5[8];
+    char access_key[12];
+    uint8_t padding6[4];
+    char serial2[8];
+    uint8_t padding7[40];
+    char access_key2[12];
+    uint8_t padding8[36];
+    char name[16];
+    uint8_t padding9[132];
+} PACKED login_gc_logine_pkt;
+
 #undef PACKED
 
 /* Parameters for the various packets. */
@@ -345,8 +401,11 @@ typedef struct login_info_req {
 #define LOGIN_DC_CHECKSUM_REPLY_TYPE        0x0097
 #define LOGIN_DC_SHIP_LIST_REQ_TYPE         0x0099
 #define LOGIN_DCV2_LOGINA_TYPE              0x009A
+#define LOGIN_GC_LOGINC_TYPE                0x009C
+#define LOGIN_GC_LOGINE_TYPE                0x009E
 #define LOGIN_BB_SHIP_LIST_TYPE             0x00A0
 #define LOGIN_TIMESTAMP_TYPE                0x00B1
+#define LOGIN_GC_VERIFY_LICENSE_TYPE        0x00DB
 #define LOGIN_GUILD_CARDS_TYPE              0x00DC
 #define LOGIN_OPTION_REQUEST_TYPE           0x00E0
 #define LOGIN_OPTION_REPLY_TYPE             0x00E2
@@ -435,5 +494,9 @@ int send_info_reply(login_client_t *c, char msg[]);
 
 /* Send a simple (header-only) packet to the client. */
 int send_simple(login_client_t *c, int type, int flags);
+
+/* Send the packet to clients that will help sort out PSOGC versus PSOPC
+   users. */
+int send_selective_redirect(login_client_t *c, in_addr_t ip, uint16_t port);
 
 #endif /* !LOGINPACKETS_H */

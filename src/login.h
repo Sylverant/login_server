@@ -93,6 +93,7 @@ typedef struct login_client {
 /* Values for the type of the login_client_t */
 #define CLIENT_TYPE_DC              0
 #define CLIENT_TYPE_PC              1
+#define CLIENT_TYPE_GC              2
 
 /* These are not supported at the moment, but here to make it so that the code
    that was written for them still works. */

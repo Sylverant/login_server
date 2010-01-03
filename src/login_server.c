@@ -176,6 +176,9 @@ int ship_transfer(login_client_t *c, uint32_t shipid) {
     if(c->type == CLIENT_TYPE_PC) {
         ++port;
     }
+    else if(c->type == CLIENT_TYPE_GC) {
+        port += 2;
+    }
 
     return send_redirect(c, ip, port);
 }
@@ -237,8 +240,8 @@ static int get_ip_info() {
     return 0;
 }
 
-static void run_server(int dcsock, int pcsock) {
-    fd_set readfds, writefds, exceptfds;
+static void run_server(int dcsock, int pcsock, int gcsock) {
+    fd_set readfds, writefds;
     struct timeval timeout;
     int nfds;
     socklen_t len;
@@ -251,14 +254,12 @@ static void run_server(int dcsock, int pcsock) {
         /* Clear the fd_sets so we can use them. */
         FD_ZERO(&readfds);
         FD_ZERO(&writefds);
-        FD_ZERO(&exceptfds);
-        timeout.tv_sec = 0;
-        timeout.tv_usec = 5000;
+        timeout.tv_sec = 9001;
+        timeout.tv_usec = 0;
 
         /* Fill the sockets into the fd_set so we can use select below. */
         TAILQ_FOREACH(i, &clients, qentry) {
             FD_SET(i->sock, &readfds);
-            FD_SET(i->sock, &exceptfds);
 
             /* Only add to the writing fd_set if we have something to write. */
             if(i->sendbuf_cur) {
@@ -273,8 +274,10 @@ static void run_server(int dcsock, int pcsock) {
         nfds = nfds > dcsock ? nfds : dcsock;
         FD_SET(pcsock, &readfds);
         nfds = nfds > pcsock ? nfds : pcsock;
+        FD_SET(gcsock, &readfds);
+        nfds = nfds > pcsock ? nfds : gcsock;
 
-        if(select(nfds + 1, &readfds, &writefds, &exceptfds, &timeout) > 0) {
+        if(select(nfds + 1, &readfds, &writefds, NULL, &timeout) > 0) {
             /* See if we have an incoming client. */
             if(FD_ISSET(dcsock, &readfds)) {
                 len = sizeof(struct sockaddr_in);
@@ -310,15 +313,25 @@ static void run_server(int dcsock, int pcsock) {
                 }
             }
 
-            /* Handle the client connections, if any. */
-            TAILQ_FOREACH(i, &clients, qentry) {
-                /* Make sure there wasn't some kind of error with this
-                   connection. */
-                if(FD_ISSET(i->sock, &exceptfds)) {
-                    debug(DBG_WARN, "Error with connection!\n");
-                    i->disconnected = 1;
+            if(FD_ISSET(gcsock, &readfds)) {
+                len = sizeof(struct sockaddr_in);
+
+                if((asock = accept(gcsock, (struct sockaddr *)&addr,
+                                   &len)) < 0) {
+                    perror("accept");
                 }
 
+                debug(DBG_LOG, "Accepted Gamecube connection from %s\n",
+                      inet_ntoa(addr.sin_addr));
+
+                if(create_connection(asock, addr.sin_addr.s_addr,
+                                     CLIENT_TYPE_GC) == NULL) {
+                    close(asock);
+                }
+            }
+
+            /* Handle the client connections, if any. */
+            TAILQ_FOREACH(i, &clients, qentry) {
                 /* Check if this connection was trying to send us something. */
                 if(FD_ISSET(i->sock, &readfds)) {
                     if(read_from_client(i)) {
@@ -408,7 +421,7 @@ static int open_sock(uint16_t port) {
 }
 
 int main(int argc, char *argv[]) {
-    int dcsock, pcsock;
+    int dcsock, pcsock, gcsock;
 
     /* Parse the command line and read our configuration. */
     parse_command_line(argc, argv);
@@ -431,12 +444,20 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
+    debug(DBG_LOG, "Opening GC port (9100) for connections.\n");
+    gcsock = open_sock(9100);
+
+    if(gcsock < 0) {
+        exit(EXIT_FAILURE);
+    }
+
     /* Run the login server. */
-    run_server(dcsock, pcsock);
+    run_server(dcsock, pcsock, gcsock);
 
     /* Clean up. */
     close(dcsock);
     close(pcsock);
+    close(gcsock);
     sylverant_db_close(&conn);
 
     return 0;

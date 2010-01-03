@@ -68,6 +68,26 @@ login_client_t *create_connection(int sock, in_addr_t ip, int type) {
             }
 
             break;
+
+        case CLIENT_TYPE_GC:
+            /* Generate the encryption keys for the client and server. */
+            client_seed_dc = genrand_int32();
+            server_seed_dc = genrand_int32();
+
+            CRYPT_CreateKeys(&rv->server_cipher, &server_seed_dc,
+                             CRYPT_GAMECUBE);
+            CRYPT_CreateKeys(&rv->client_cipher, &client_seed_dc,
+                             CRYPT_GAMECUBE);
+            rv->hdr_size = 4;
+
+            /* Send the client the welcome packet, or die trying. */
+            if(send_dc_welcome(rv, server_seed_dc, client_seed_dc)) {
+                close(sock);
+                free(rv);
+                return NULL;
+            }
+
+            break;
     }
 
     /* Insert it at the end of our list, and we're done. */
@@ -138,9 +158,9 @@ int read_from_client(login_client_t *c) {
                 CRYPT_CryptData(&c->client_cipher, &c->pkt, c->hdr_size, 0);
             }
 
-
             switch(c->type) {
                 case CLIENT_TYPE_DC:
+                case CLIENT_TYPE_GC:
                     pkt_sz = LE16(c->pkt.dc.pkt_len);
                     break;
 
@@ -166,6 +186,7 @@ int read_from_client(login_client_t *c) {
                 switch(c->type) {
                     case CLIENT_TYPE_DC:
                     case CLIENT_TYPE_PC:
+                    case CLIENT_TYPE_GC:
                         rv = process_dclogin_packet(c, rbp);
                         break;
                 }
