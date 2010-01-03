@@ -266,6 +266,7 @@ int send_redirect(login_client_t *c, in_addr_t ip, uint16_t port) {
 
         case CLIENT_TYPE_DC:
         case CLIENT_TYPE_PC:
+        case CLIENT_TYPE_GC:
             return send_redirect_dc(c, ip, port);
     }
 
