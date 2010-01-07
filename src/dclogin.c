@@ -21,9 +21,12 @@
 
 #include <sylverant/debug.h>
 #include <sylverant/database.h>
+#include <sylverant/quest.h>
 
 #include "login.h"
 #include "login_packets.h"
+
+extern sylverant_quest_list_t qlist;
 
 /* Handle a client's login request packet. */
 static int handle_login(login_client_t *c, login_dclogin_pkt *pkt) {
@@ -373,8 +376,20 @@ static int handle_gclogine(login_client_t *c, login_gc_logine_pkt *pkt) {
 static int handle_ship_select(login_client_t *c,
                               dc_login_ship_select_pkt *pkt) {
     extern int ship_transfer(login_client_t *c, uint32_t shipid);
-    
-    return ship_transfer(c, LE32(pkt->item_id));
+
+    /* Were we on a ship select or the offline quest menu? */
+    if(LE32(pkt->menu_id) == 0x00120000) {
+        /* Check if they picked the "Offline Quests" entry. */
+        if(LE32(pkt->item_id) == 0xDEADBEEF && qlist.cat_count == 1) {
+            return send_quest_list(c, &qlist.cats[0]);
+        }
+        else {
+            return ship_transfer(c, LE32(pkt->item_id));
+        }
+    }
+    else {
+        return send_quest(c, &qlist.cats[0].quests[LE32(pkt->item_id)]);
+    }
 }
 
 /* Process one login packet. */
@@ -418,6 +433,7 @@ int process_dclogin_packet(login_client_t *c, void *pkt) {
             return send_timestamp(c);
 
         case LOGIN_DC_SHIP_LIST_REQ_TYPE:
+        case LOGIN_SHIP_LIST_TYPE:
             /* XXXX: I don't have anything here either, but thought I'd be
                funny anyway. */
             return send_ship_list(c);

@@ -24,12 +24,15 @@
 #include <sys/time.h>
 #include <sys/socket.h>
 
+#include <sylverant/config.h>
 #include <sylverant/encryption.h>
 #include <sylverant/database.h>
+#include <sylverant/quest.h>
 
 #include "login_packets.h"
 
 extern sylverant_dbconn_t conn;
+extern sylverant_config_t cfg;
 
 uint8_t sendbuf[65536];
 
@@ -532,7 +535,7 @@ static int send_ship_list_bb(login_client_t *c) {
     memset(pkt, 0, sizeof(bb_login_ship_list_pkt));
 
     /* Fill in some basic stuff */
-    pkt->hdr.pkt_type = LE16(LOGIN_BB_SHIP_LIST_TYPE);
+    pkt->hdr.pkt_type = LE16(LOGIN_SHIP_LIST_TYPE);
     pkt->thirty_two = 0x20;
     pkt->unk1 = LE32(0xFFFFFFF4);
     pkt->four = 0x04;
@@ -682,6 +685,23 @@ static int send_ship_list_dc(login_client_t *c) {
     }
 
     sylverant_db_result_free(result);
+
+    if(cfg.quests_file[0]) {
+        /* Add the entry for Offline Quests. */
+        memset(&pkt->entries[num_ships], 0, 0x1C);
+    
+        /* Fill in what we have */
+        pkt->entries[num_ships].menu_id = LE32(0x00120000);
+        pkt->entries[num_ships].item_id = LE32(0xDEADBEEF);
+        pkt->entries[num_ships].flags = LE16(0x0000);
+    
+        /* Create the name string */
+        strcpy(pkt->entries[num_ships].name, "Offline Quests");
+    
+        /* We're done with this "ship", increment the counter */
+        ++num_ships;
+        len += 0x1C;
+    }
 
     /* Make sure we have at least one ship... */
     if(num_ships == 1) {
@@ -978,6 +998,586 @@ int send_simple(login_client_t *c, int type, int flags) {
 
         case CLIENT_TYPE_PC:
             return send_simple_pc(c, type, flags);
+    }
+
+    return -1;
+}
+
+/* Send the list of quests in a category to the client. */
+static int send_dc_quest_list(login_client_t *c,
+                              sylverant_quest_category_t *l, uint32_t ver) {
+    dc_quest_list_pkt *pkt = (dc_quest_list_pkt *)sendbuf;
+    int i, len = 0x04, entries = 0;
+
+    /* Verify we got the sendbuf. */
+    if(!sendbuf) {
+        return -1;
+    }
+
+    /* Clear out the header */
+    memset(pkt, 0, 0x04);
+
+    /* Fill in the header */
+    pkt->hdr.pkt_type = LOGIN_QUEST_LIST_TYPE;
+
+    for(i = 0; i < l->quest_count; ++i) {
+        if(!(l->quests[i].versions & ver)) {
+            continue;
+        }
+
+        /* Clear the entry */
+        memset(pkt->entries + entries, 0, 0x98);
+
+        /* Copy the category's information over to the packet */
+        pkt->entries[entries].menu_id = LE32(0x00000004);
+        pkt->entries[entries].item_id = LE32(i);
+
+        memcpy(pkt->entries[entries].name, l->quests[i].name, 32);
+        memcpy(pkt->entries[entries].desc, l->quests[i].desc, 112);
+        
+        ++entries;
+        len += 0x98;
+    }
+
+    /* Fill in the rest of the header */
+    pkt->hdr.flags = entries;
+    pkt->hdr.pkt_len = LE16(len);
+
+    /* Send it away */
+    return crypt_send(c, len);
+}
+
+static int send_pc_quest_list(login_client_t *c,
+                              sylverant_quest_category_t *l, uint32_t ver) {
+    pc_quest_list_pkt *pkt = (pc_quest_list_pkt *)sendbuf;
+    int i, len = 0x04, entries = 0;
+    iconv_t ic;
+    size_t in, out;
+    char *inptr, *outptr;
+
+    /* Verify we got the sendbuf. */
+    if(!sendbuf) {
+        return -1;
+    }
+
+    /* Quest names are stored internally as Shift-JIS, convert to UTF-16. */
+    ic = iconv_open("UTF-16LE", "SHIFT_JIS");
+
+    if(ic == (iconv_t)-1) {
+        perror("iconv_open");
+        return -1;
+    }
+
+    /* Clear out the header */
+    memset(pkt, 0, 0x04);
+
+    /* Fill in the header */
+    pkt->hdr.pkt_type = LOGIN_QUEST_LIST_TYPE;
+
+    for(i = 0; i < l->quest_count; ++i) {
+        if(!(l->quests[i].versions & ver)) {
+            continue;
+        }
+
+        /* Clear the entry */
+        memset(pkt->entries + entries, 0, 0x98);
+
+        /* Copy the category's information over to the packet */
+        pkt->entries[entries].menu_id = LE32(0x00000004);
+        pkt->entries[entries].item_id = LE32(i);
+
+        /* Convert the name and the description to UTF-16. */
+        in = 32;
+        out = 64;
+        inptr = l->quests[i].name;
+        outptr = (char *)pkt->entries[entries].name;
+        iconv(ic, &inptr, &in, &outptr, &out);
+
+        in = 112;
+        out = 224;
+        inptr = l->quests[i].desc;
+        outptr = (char *)pkt->entries[entries].desc;
+        iconv(ic, &inptr, &in, &outptr, &out);
+
+        ++entries;
+        len += 0x128;
+    }
+
+    iconv_close(ic);
+
+    /* Fill in the rest of the header */
+    pkt->hdr.flags = entries;
+    pkt->hdr.pkt_len = LE16(len);
+
+    /* Send it away */
+    return crypt_send(c, len);
+}
+
+static int send_gc_quest_list(login_client_t *c,
+                              sylverant_quest_category_t *l) {
+    dc_quest_list_pkt *pkt = (dc_quest_list_pkt *)sendbuf;
+    int i, len = 0x04, entries = 0;
+
+    /* Verify we got the sendbuf. */
+    if(!sendbuf) {
+        return -1;
+    }
+
+    /* Clear out the header */
+    memset(pkt, 0, 0x04);
+
+    /* Fill in the header */
+    pkt->hdr.pkt_type = LOGIN_QUEST_LIST_TYPE;
+
+    for(i = 0; i < l->quest_count; ++i) {
+        if(!(l->quests[i].versions & SYLVERANT_QUEST_GC)) {
+            continue;
+        }
+
+        /* Clear the entry */
+        memset(pkt->entries + entries, 0, 0x98);
+
+        /* Copy the category's information over to the packet */
+        pkt->entries[entries].menu_id = LE32(0x00000004);
+        pkt->entries[entries].item_id = LE32(i);
+
+        memcpy(pkt->entries[entries].name, l->quests[i].name, 32);
+        memcpy(pkt->entries[entries].desc, l->quests[i].desc, 112);
+        
+        ++entries;
+        len += 0x98;
+    }
+
+    /* Fill in the rest of the header */
+    pkt->hdr.flags = entries;
+    pkt->hdr.pkt_len = LE16(len);
+
+    /* Send it away */
+    return crypt_send(c, len);
+}
+
+int send_quest_list(login_client_t *c, sylverant_quest_category_t *l) {
+    /* Call the appropriate function. */
+    switch(c->type) {
+        case CLIENT_TYPE_DC:
+            return send_dc_quest_list(c, l, SYLVERANT_QUEST_V1);
+
+        case CLIENT_TYPE_PC:
+            return send_pc_quest_list(c, l, SYLVERANT_QUEST_V2);
+
+        case CLIENT_TYPE_GC:
+            return send_gc_quest_list(c, l);
+    }
+
+    return -1;
+}
+
+/* Send a quest to a client. */
+static int send_dc_quest(login_client_t *c, sylverant_quest_t *q) {
+    dc_quest_file_pkt *file = (dc_quest_file_pkt *)sendbuf;
+    dc_quest_chunk_pkt *chunk = (dc_quest_chunk_pkt *)sendbuf;
+    FILE *bin, *dat;
+    uint32_t binlen, datlen;
+    int bindone = 0, datdone = 0, chunknum = 0;
+    char filename[256];
+    size_t amt;
+
+    /* Verify we got the sendbuf. */
+    if(!sendbuf) {
+        return -1;
+    }
+
+    /* Each quest has two files: a .dat file and a .bin file, send a file packet
+       for each of them. */
+    sprintf(filename, "offline_quests/dc-en/%s.bin", q->prefix);
+    bin = fopen(filename, "rb");
+
+    sprintf(filename, "offline_quests/dc-en/%s.dat", q->prefix);
+    dat = fopen(filename, "rb");
+
+    if(!bin || !dat) {
+        return -1;
+    }
+
+    /* Figure out how long each of the files are */
+    fseek(bin, 0, SEEK_END);
+    binlen = (uint32_t)ftell(bin);
+    fseek(bin, 0, SEEK_SET);
+
+    fseek(dat, 0, SEEK_END);
+    datlen = (uint32_t)ftell(dat);
+    fseek(dat, 0, SEEK_SET);
+
+    /* Send the file info packets */
+    /* Start with the .dat file. */
+    memset(file, 0, sizeof(dc_quest_file_pkt));
+
+    sprintf(file->name, "%s", q->name);
+
+    file->hdr.pkt_type = LOGIN_QUEST_FILE_TYPE;
+    file->hdr.flags = 0x02; /* ??? */
+    file->hdr.pkt_len = LE16(LOGIN_DC_QUEST_FILE_LENGTH);
+    sprintf(file->filename, "%s.dat", q->prefix);
+    file->length = LE32(datlen);
+
+    if(crypt_send(c, LOGIN_DC_QUEST_FILE_LENGTH)) {
+        return -2;
+    }
+
+    /* Now the .bin file. */
+    memset(file, 0, sizeof(dc_quest_file_pkt));
+
+    sprintf(file->name, "%s", q->name);
+    
+    file->hdr.pkt_type = LOGIN_QUEST_FILE_TYPE;
+    file->hdr.flags = 0x02; /* ??? */
+    file->hdr.pkt_len = LE16(LOGIN_DC_QUEST_FILE_LENGTH);
+    sprintf(file->filename, "%s.bin", q->prefix);
+    file->length = LE32(binlen);
+
+    if(crypt_send(c, LOGIN_DC_QUEST_FILE_LENGTH)) {
+        return -2;
+    }
+
+    /* Now send the chunks of the file, interleaved. */
+    while(!bindone || !datdone) {
+        /* Start with the dat file if we've got any more to send from it */
+        if(!datdone) {
+            /* Clear the packet */
+            memset(chunk, 0, sizeof(dc_quest_chunk_pkt));
+
+            /* Fill in the header */
+            chunk->hdr.dc.pkt_type = LOGIN_QUEST_CHUNK_TYPE;
+            chunk->hdr.dc.flags = (uint8_t)chunknum;
+            chunk->hdr.dc.pkt_len = LE16(LOGIN_DC_QUEST_CHUNK_LENGTH);
+
+            /* Fill in the rest */
+            sprintf(chunk->filename, "%s.dat", q->prefix);
+            amt = fread(chunk->data, 1, 0x400, dat);
+            chunk->length = LE32(((uint32_t)amt));
+
+            /* Send it away */
+            if(crypt_send(c, LOGIN_DC_QUEST_CHUNK_LENGTH)) {
+                return -3;
+            }
+
+            /* Are we done with this file? */
+            if(amt != 0x400) {
+                datdone = 1;
+            }
+        }
+
+        /* Then the bin file if we've got any more to send from it */
+        if(!bindone) {
+            /* Clear the packet */
+            memset(chunk, 0, sizeof(dc_quest_chunk_pkt));
+
+            /* Fill in the header */
+            chunk->hdr.dc.pkt_type = LOGIN_QUEST_CHUNK_TYPE;
+            chunk->hdr.dc.flags = (uint8_t)chunknum;
+            chunk->hdr.dc.pkt_len = LE16(LOGIN_DC_QUEST_CHUNK_LENGTH);
+
+            /* Fill in the rest */
+            sprintf(chunk->filename, "%s.bin", q->prefix);
+            amt = fread(chunk->data, 1, 0x400, bin);
+            chunk->length = LE32(((uint32_t)amt));
+
+            /* Send it away */
+            if(crypt_send(c, LOGIN_DC_QUEST_CHUNK_LENGTH)) {
+                return -3;
+            }
+
+            /* Are we done with this file? */
+            if(amt != 0x400) {
+                bindone = 1;
+            }
+        }
+
+        ++chunknum;
+    }
+
+    /* We're done with the files, close them */
+    fclose(bin);
+    fclose(dat);
+
+    return 0;
+}
+
+static int send_pc_quest(login_client_t *c, sylverant_quest_t *q) {
+    pc_quest_file_pkt *file = (pc_quest_file_pkt *)sendbuf;
+    dc_quest_chunk_pkt *chunk = (dc_quest_chunk_pkt *)sendbuf;
+    FILE *bin, *dat;
+    uint32_t binlen, datlen;
+    int bindone = 0, datdone = 0, chunknum = 0;
+    char filename[256];
+    size_t amt;
+
+    /* Verify we got the sendbuf. */
+    if(!sendbuf) {
+        return -1;
+    }
+
+    /* Each quest has two files: a .dat file and a .bin file, send a file packet
+       for each of them. */
+    sprintf(filename, "offline_quests/pc-en/%s.bin", q->prefix);
+    bin = fopen(filename, "rb");
+
+    sprintf(filename, "offline_quests/pc-en/%s.dat", q->prefix);
+    dat = fopen(filename, "rb");
+
+    if(!bin || !dat) {
+        return -1;
+    }
+
+    /* Figure out how long each of the files are */
+    fseek(bin, 0, SEEK_END);
+    binlen = (uint32_t)ftell(bin);
+    fseek(bin, 0, SEEK_SET);
+
+    fseek(dat, 0, SEEK_END);
+    datlen = (uint32_t)ftell(dat);
+    fseek(dat, 0, SEEK_SET);
+
+    /* Send the file info packets */
+    /* Start with the .dat file. */
+    memset(file, 0, sizeof(pc_quest_file_pkt));
+
+    sprintf(file->name, "%s", q->name);
+
+    file->hdr.pkt_type = LOGIN_QUEST_FILE_TYPE;
+    file->hdr.flags = 0x00;
+    file->hdr.pkt_len = LE16(LOGIN_DC_QUEST_FILE_LENGTH);
+    sprintf(file->filename, "%s.dat", q->prefix);
+    file->length = LE32(datlen);
+    file->flags = 0x0002;
+
+    if(crypt_send(c, LOGIN_DC_QUEST_FILE_LENGTH)) {
+        return -2;
+    }
+
+    /* Now the .bin file. */
+    memset(file, 0, sizeof(pc_quest_file_pkt));
+
+    sprintf(file->name, "%s", q->name);
+
+    file->hdr.pkt_type = LOGIN_QUEST_FILE_TYPE;
+    file->hdr.flags = 0x00;
+    file->hdr.pkt_len = LE16(LOGIN_DC_QUEST_FILE_LENGTH);
+    sprintf(file->filename, "%s.bin", q->prefix);
+    file->length = LE32(binlen);
+    file->flags = 0x0002;
+
+    if(crypt_send(c, LOGIN_DC_QUEST_FILE_LENGTH)) {
+        return -2;
+    }
+
+    /* Now send the chunks of the file, interleaved. */
+    while(!bindone || !datdone) {
+        /* Start with the dat file if we've got any more to send from it */
+        if(!datdone) {
+            /* Clear the packet */
+            memset(chunk, 0, sizeof(dc_quest_chunk_pkt));
+
+            /* Fill in the header */
+            chunk->hdr.pc.pkt_type = LOGIN_QUEST_CHUNK_TYPE;
+            chunk->hdr.pc.flags = (uint8_t)chunknum;
+            chunk->hdr.pc.pkt_len = LE16(LOGIN_DC_QUEST_CHUNK_LENGTH);
+
+            /* Fill in the rest */
+            sprintf(chunk->filename, "%s.dat", q->prefix);
+            amt = fread(chunk->data, 1, 0x400, dat);
+            chunk->length = LE32(((uint32_t)amt));
+
+            /* Send it away */
+            if(crypt_send(c, LOGIN_DC_QUEST_CHUNK_LENGTH)) {
+                return -3;
+            }
+
+            /* Are we done with this file? */
+            if(amt != 0x400) {
+                datdone = 1;
+            }
+        }
+
+        /* Then the bin file if we've got any more to send from it */
+        if(!bindone) {
+            /* Clear the packet */
+            memset(chunk, 0, sizeof(dc_quest_chunk_pkt));
+
+            /* Fill in the header */
+            chunk->hdr.pc.pkt_type = LOGIN_QUEST_CHUNK_TYPE;
+            chunk->hdr.pc.flags = (uint8_t)chunknum;
+            chunk->hdr.pc.pkt_len = LE16(LOGIN_DC_QUEST_CHUNK_LENGTH);
+
+            /* Fill in the rest */
+            sprintf(chunk->filename, "%s.bin", q->prefix);
+            amt = fread(chunk->data, 1, 0x400, bin);
+            chunk->length = LE32(((uint32_t)amt));
+
+            /* Send it away */
+            if(crypt_send(c, LOGIN_DC_QUEST_CHUNK_LENGTH)) {
+                return -3;
+            }
+
+            /* Are we done with this file? */
+            if(amt != 0x400) {
+                bindone = 1;
+            }
+        }
+
+        ++chunknum;
+    }
+
+    /* We're done with the files, close them */
+    fclose(bin);
+    fclose(dat);
+
+    return 0;
+}
+
+static int send_gc_quest(login_client_t *c, sylverant_quest_t *q) {
+    gc_quest_file_pkt *file = (gc_quest_file_pkt *)sendbuf;
+    dc_quest_chunk_pkt *chunk = (dc_quest_chunk_pkt *)sendbuf;
+    FILE *bin, *dat;
+    uint32_t binlen, datlen;
+    int bindone = 0, datdone = 0, chunknum = 0;
+    char filename[256];
+    size_t amt;
+
+    /* Verify we got the sendbuf. */
+    if(!sendbuf) {
+        return -1;
+    }
+
+    /* Each quest has two files: a .dat file and a .bin file, send a file packet
+       for each of them. */
+    sprintf(filename, "offline_quests/gc-en/%s.bin", q->prefix);
+    bin = fopen(filename, "rb");
+
+    sprintf(filename, "offline_quests/gc-en/%s.dat", q->prefix);
+    dat = fopen(filename, "rb");
+
+    if(!bin || !dat) {
+        return -1;
+    }
+
+    /* Figure out how long each of the files are */
+    fseek(bin, 0, SEEK_END);
+    binlen = (uint32_t)ftell(bin);
+    fseek(bin, 0, SEEK_SET);
+
+    fseek(dat, 0, SEEK_END);
+    datlen = (uint32_t)ftell(dat);
+    fseek(dat, 0, SEEK_SET);
+
+    /* Send the file info packets */
+    /* Start with the .dat file. */
+    memset(file, 0, sizeof(pc_quest_file_pkt));
+
+    sprintf(file->name, "%s", q->name);
+
+    file->hdr.pkt_type = LOGIN_QUEST_FILE_TYPE;
+    file->hdr.flags = 0x00;
+    file->hdr.pkt_len = LE16(LOGIN_DC_QUEST_FILE_LENGTH);
+    sprintf(file->filename, "%s.dat", q->prefix);
+    file->length = LE32(datlen);
+    file->flags = 0x0002;
+
+    if(crypt_send(c, LOGIN_DC_QUEST_FILE_LENGTH)) {
+        return -2;
+    }
+
+    /* Now the .bin file. */
+    memset(file, 0, sizeof(pc_quest_file_pkt));
+
+    sprintf(file->name, "%s", q->name);
+
+    file->hdr.pkt_type = LOGIN_QUEST_FILE_TYPE;
+    file->hdr.flags = 0x00;
+    file->hdr.pkt_len = LE16(LOGIN_DC_QUEST_FILE_LENGTH);
+    sprintf(file->filename, "%s.bin", q->prefix);
+    file->length = LE32(binlen);
+    file->flags = 0x0002;
+
+    if(crypt_send(c, LOGIN_DC_QUEST_FILE_LENGTH)) {
+        return -2;
+    }
+
+    /* Now send the chunks of the file, interleaved. */
+    while(!bindone || !datdone) {
+        /* Start with the dat file if we've got any more to send from it */
+        if(!datdone) {
+            /* Clear the packet */
+            memset(chunk, 0, sizeof(dc_quest_chunk_pkt));
+
+            /* Fill in the header */
+            chunk->hdr.dc.pkt_type = LOGIN_QUEST_CHUNK_TYPE;
+            chunk->hdr.dc.flags = (uint8_t)chunknum;
+            chunk->hdr.dc.pkt_len = LE16(LOGIN_DC_QUEST_CHUNK_LENGTH);
+
+            /* Fill in the rest */
+            sprintf(chunk->filename, "%s.dat", q->prefix);
+            amt = fread(chunk->data, 1, 0x400, dat);
+            chunk->length = LE32(((uint32_t)amt));
+
+            /* Send it away */
+            if(crypt_send(c, LOGIN_DC_QUEST_CHUNK_LENGTH)) {
+                return -3;
+            }
+
+            /* Are we done with this file? */
+            if(amt != 0x400) {
+                datdone = 1;
+            }
+        }
+
+        /* Then the bin file if we've got any more to send from it */
+        if(!bindone) {
+            /* Clear the packet */
+            memset(chunk, 0, sizeof(dc_quest_chunk_pkt));
+
+            /* Fill in the header */
+            chunk->hdr.dc.pkt_type = LOGIN_QUEST_CHUNK_TYPE;
+            chunk->hdr.dc.flags = (uint8_t)chunknum;
+            chunk->hdr.dc.pkt_len = LE16(LOGIN_DC_QUEST_CHUNK_LENGTH);
+
+            /* Fill in the rest */
+            sprintf(chunk->filename, "%s.bin", q->prefix);
+            amt = fread(chunk->data, 1, 0x400, bin);
+            chunk->length = LE32(((uint32_t)amt));
+
+            /* Send it away */
+            if(crypt_send(c, LOGIN_DC_QUEST_CHUNK_LENGTH)) {
+                return -3;
+            }
+
+            /* Are we done with this file? */
+            if(amt != 0x400) {
+                bindone = 1;
+            }
+        }
+
+        ++chunknum;
+    }
+
+    /* We're done with the files, close them */
+    fclose(bin);
+    fclose(dat);
+
+    return 0;
+}
+
+int send_quest(login_client_t *c, sylverant_quest_t *q) {
+    /* Call the appropriate function. */
+    switch(c->type) {
+        case CLIENT_TYPE_DC:
+            return send_dc_quest(c, q);
+
+        case CLIENT_TYPE_PC:
+            return send_pc_quest(c, q);
+
+        case CLIENT_TYPE_GC:
+            return send_gc_quest(c, q);
     }
 
     return -1;

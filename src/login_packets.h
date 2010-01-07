@@ -23,6 +23,7 @@
 
 #include <sylverant/characters.h>
 #include <sylverant/encryption.h>
+#include <sylverant/quest.h>
 
 #include "login.h"
 
@@ -381,6 +382,72 @@ typedef struct login_gc_logine {
     uint8_t padding9[132];
 } PACKED login_gc_logine_pkt;
 
+/* The packet used to send the quest list (Dreamcast). */
+typedef struct dc_quest_list {
+    dc_pkt_header_t hdr;
+    struct {
+        uint32_t menu_id;
+        uint32_t item_id;
+        char name[32];
+        char desc[112];
+    } entries[0];
+} PACKED dc_quest_list_pkt;
+
+/* The packet used to send the quest list (PC). */
+typedef struct pc_quest_list {
+    pc_pkt_header_t hdr;
+    struct {
+        uint32_t menu_id;
+        uint32_t item_id;
+        uint16_t name[32];
+        uint16_t desc[112];
+    } entries[0];
+} PACKED pc_quest_list_pkt;
+
+/* The packet sent to inform a client of a quest file that will be coming down
+   the pipe (Dreamcast). */
+typedef struct dc_quest_file {
+    dc_pkt_header_t hdr;
+    char name[32];
+    uint8_t unused1[3];
+    char filename[16];
+    uint8_t unused2;
+    uint32_t length;
+} PACKED dc_quest_file_pkt;
+
+/* The packet sent to inform a client of a quest file that will be coming down
+   the pipe (PC). */
+typedef struct pc_quest_file {
+    pc_pkt_header_t hdr;
+    char name[32];
+    uint16_t unused;
+    uint16_t flags;
+    char filename[16];
+    uint32_t length;
+} PACKED pc_quest_file_pkt;
+
+/* The packet sent to inform a client of a quest file that will be coming down
+   the pipe (Gamecube). */
+typedef struct gc_quest_file {
+    dc_pkt_header_t hdr;
+    char name[32];
+    uint16_t unused;
+    uint16_t flags;
+    char filename[16];
+    uint32_t length;
+} PACKED gc_quest_file_pkt;
+
+/* The packet sent to actually send quest data (Dreamcast/PC). */
+typedef struct dc_quest_chunk {
+    union {
+        dc_pkt_header_t dc;
+        pc_pkt_header_t pc;
+    } hdr;
+    char filename[16];
+    char data[1024];
+    uint32_t length;
+} PACKED dc_quest_chunk_pkt;
+
 #undef PACKED
 
 /* Parameters for the various packets. */
@@ -403,7 +470,10 @@ typedef struct login_gc_logine {
 #define LOGIN_DCV2_LOGINA_TYPE              0x009A
 #define LOGIN_GC_LOGINC_TYPE                0x009C
 #define LOGIN_GC_LOGINE_TYPE                0x009E
-#define LOGIN_BB_SHIP_LIST_TYPE             0x00A0
+#define LOGIN_SHIP_LIST_TYPE                0x00A0
+#define LOGIN_QUEST_LIST_TYPE               0x00A4
+#define LOGIN_QUEST_FILE_TYPE               0x00A6
+#define LOGIN_QUEST_CHUNK_TYPE              0x00A7
 #define LOGIN_TIMESTAMP_TYPE                0x00B1
 #define LOGIN_GC_VERIFY_LICENSE_TYPE        0x00DB
 #define LOGIN_GUILD_CARDS_TYPE              0x00DC
@@ -431,6 +501,10 @@ typedef struct login_gc_logine {
 #define LOGIN_CHAR_DATA_LENGTH              0x0088
 #define LOGIN_SECURITY_LENGTH               0x0044
 #define LOGIN_GUILD_ACK_LENGTH              0x000C
+#define LOGIN_DC_QUEST_INFO_LENGTH          0x0128
+#define LOGIN_PC_QUEST_INFO_LENGTH          0x024C
+#define LOGIN_DC_QUEST_FILE_LENGTH          0x003C
+#define LOGIN_DC_QUEST_CHUNK_LENGTH         0x0418
 
 /* This must be placed into the copyright field in the BB welcome packet. */
 const static char login_bb_welcome_copyright[] =
@@ -498,5 +572,11 @@ int send_simple(login_client_t *c, int type, int flags);
 /* Send the packet to clients that will help sort out PSOGC versus PSOPC
    users. */
 int send_selective_redirect(login_client_t *c, in_addr_t ip, uint16_t port);
+
+/* Send the quest list to a client. */
+int send_quest_list(login_client_t *c, sylverant_quest_category_t *l);
+
+/* Send a quest to a client. */
+int send_quest(login_client_t *c, sylverant_quest_t *q);
 
 #endif /* !LOGINPACKETS_H */

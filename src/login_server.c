@@ -38,6 +38,7 @@
 #include <sylverant/characters.h>
 #include <sylverant/mtwist.h>
 #include <sylverant/debug.h>
+#include <sylverant/quest.h>
 
 #include "login.h"
 #include "login_packets.h"
@@ -47,6 +48,7 @@
 /* Stuff read from the config files */
 sylverant_dbconn_t conn;
 sylverant_config_t cfg;
+sylverant_quest_list_t qlist;
 
 in_addr_t local_addr;
 in_addr_t netmask;
@@ -113,7 +115,12 @@ static void parse_command_line(int argc, char *argv[]) {
 /* Load the configuration file and print out parameters with DBG_LOG. */
 static void load_config() {
     if(sylverant_read_config(&cfg)) {
-        printf("Cannot load configuration!\n");
+        debug(DBG_ERROR, "Cannot load configuration!\n");
+        exit(1);
+    }
+
+    if(cfg.quests_file[0] && sylverant_quests_read(cfg.quests_file, &qlist)) {
+        debug(DBG_ERROR, "Cannot load offline quests list!\n");
         exit(1);
     }
 
@@ -423,11 +430,12 @@ static int open_sock(uint16_t port) {
 int main(int argc, char *argv[]) {
     int dcsock, pcsock, gcsock;
 
+    chdir(SYLVERANT_DIRECTORY);
+
     /* Parse the command line and read our configuration. */
     parse_command_line(argc, argv);
     load_config();
 
-    chdir(SYLVERANT_DIRECTORY);
     get_ip_info();
 
     debug(DBG_LOG, "Opening Dreamcast port (9200) for connections.\n");
@@ -459,6 +467,7 @@ int main(int argc, char *argv[]) {
     close(pcsock);
     close(gcsock);
     sylverant_db_close(&conn);
+    sylverant_quests_destroy(&qlist);
 
     return 0;
 }
