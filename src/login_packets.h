@@ -111,15 +111,18 @@ typedef struct login_login {
 typedef struct login_dclogin {
     dc_pkt_header_t hdr;
     uint32_t unk1[2];
-    uint32_t unk2[4];
+    uint32_t unk2[3];
+    uint8_t padding1;
+    uint8_t language_code;
+    uint16_t padding2;
     char serial[8];
-    uint8_t padding1[9];
+    uint8_t padding3[9];
     char access_key[8];
-    uint8_t padding2[9];
+    uint8_t padding4[9];
     char dc_id[8];
-    uint8_t padding3[88];
+    uint8_t padding5[88];
     char name[16];
-    uint8_t padding4[2];
+    uint8_t padding6[2];
     uint8_t sec_data[0];
 } PACKED login_dclogin_pkt;
 
@@ -350,7 +353,7 @@ typedef struct login_gc_loginc {
     uint8_t padding1[8];
     uint8_t version;
     uint8_t padding2[4];
-    uint8_t one;            /* 0x01 */
+    uint8_t language_code;
     uint8_t padding3[2];
     char serial[8];
     uint8_t padding4[40];
@@ -360,15 +363,15 @@ typedef struct login_gc_loginc {
     uint8_t padding6[32];
 } PACKED login_gc_loginc_pkt;
 
-/* The other login packet sent by PSOGC. */
-typedef struct login_gc_logine {
+/* Login packet type 0x9D and 0x9E (Gamecube/PC/Dreamcast). */
+typedef struct login_login_de {
     dc_pkt_header_t hdr;
     uint8_t padding1[2];
     uint8_t ffffffffffff[6];
     uint8_t padding2[8];
     uint8_t version;
     uint8_t padding3[4];
-    uint8_t one;            /* 0x01 */
+    uint8_t language_code;
     uint8_t padding4[34];
     char serial[8];
     uint8_t padding5[8];
@@ -380,7 +383,7 @@ typedef struct login_gc_logine {
     uint8_t padding8[36];
     char name[16];
     uint8_t padding9[132];
-} PACKED login_gc_logine_pkt;
+} PACKED login_login_de_pkt;
 
 /* The packet used to send the quest list (Dreamcast). */
 typedef struct dc_quest_list {
@@ -469,6 +472,7 @@ typedef struct dc_quest_chunk {
 #define LOGIN_DC_SHIP_LIST_REQ_TYPE         0x0099
 #define LOGIN_DCV2_LOGINA_TYPE              0x009A
 #define LOGIN_GC_LOGINC_TYPE                0x009C
+#define LOGIN_LOGIND_TYPE                   0x009D
 #define LOGIN_GC_LOGINE_TYPE                0x009E
 #define LOGIN_SHIP_LIST_TYPE                0x00A0
 #define LOGIN_QUEST_LIST_TYPE               0x00A4

@@ -72,6 +72,7 @@ typedef struct login_client {
 
     in_addr_t ip_addr;
     uint32_t guildcard;
+    int language_code;
 
     CRYPT_SETUP client_cipher;
     CRYPT_SETUP server_cipher;

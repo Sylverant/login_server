@@ -35,6 +35,8 @@ static int handle_login(login_client_t *c, login_dclogin_pkt *pkt) {
     void *result;
     char **row;
 
+    c->language_code = pkt->language_code;
+
     /* Escape all the important strings. */
     sylverant_db_escape_str(&conn, dc_id, pkt->dc_id, 8);
     sylverant_db_escape_str(&conn, serial, pkt->serial, 8);
@@ -169,7 +171,11 @@ static int handle_v2login(login_client_t *c, login_dcv2login_pkt *pkt) {
         }
     }
 
-    return send_dc_security(c, gc, NULL, 0);
+    c->guildcard = gc;
+
+    /* Force them to send us a 0x9D so we have their language code, since this
+       packet doesn't have it. */
+    return send_simple(c, LOGIN_DCV2_LOGINA_TYPE, 2);
 }
 
 /* The next few functions look the same pretty much... All added for gamecube
@@ -338,11 +344,13 @@ static int handle_gcloginc(login_client_t *c, login_gc_loginc_pkt *pkt) {
     return -1;
 }
 
-static int handle_gclogine(login_client_t *c, login_gc_logine_pkt *pkt) {
+static int handle_gclogine(login_client_t *c, login_login_de_pkt *pkt) {
     uint32_t gc;
     char query[256], serial[32], access[32];
     void *result;
     char **row;
+
+    c->language_code = pkt->language_code;
 
     /* Escape all the important strings. */
     sylverant_db_escape_str(&conn, serial, pkt->serial, 8);
@@ -359,7 +367,7 @@ static int handle_gclogine(login_client_t *c, login_gc_logine_pkt *pkt) {
     result = sylverant_db_result_store(&conn);
 
     if((row = sylverant_db_result_fetch(result))) {
-        /* The client has at least registered, check the password. */
+        /* Grab the client's guildcard number. */
         gc = (uint32_t)strtoul(row[0], NULL, 0);
         sylverant_db_result_free(result);
 
@@ -370,6 +378,14 @@ static int handle_gclogine(login_client_t *c, login_gc_logine_pkt *pkt) {
 
     /* If we get here, we didn't find them, bail out. */
     return -1;
+}
+
+static int handle_logind(login_client_t *c, login_login_de_pkt *pkt) {
+    /* We made clients send this packet just specifically to grab the language
+       code... All the real checking has been done elsewhere. */
+    c->language_code = pkt->language_code;
+
+    return send_dc_security(c, c->guildcard, NULL, 0);
 }
 
 /* Handle a client's ship select packet. */
@@ -456,7 +472,11 @@ int process_dclogin_packet(login_client_t *c, void *pkt) {
 
         case LOGIN_GC_LOGINE_TYPE:
             /* XXXX: One final check, and give them their guildcard. */
-            return handle_gclogine(c, (login_gc_logine_pkt *)pkt);
+            return handle_gclogine(c, (login_login_de_pkt *)pkt);
+
+        case LOGIN_LOGIND_TYPE:
+            /* XXXX: All this work for a language code... */
+            return handle_logind(c, (login_login_de_pkt *)pkt);
 
         default:
             return -3;
