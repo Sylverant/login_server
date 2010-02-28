@@ -66,7 +66,51 @@ static int is_ip_banned(in_addr_t ip) {
 }
 
 /* Handle a client's login request packet. */
-static int handle_login(login_client_t *c, login_dclogin_pkt *pkt) {
+static int handle_login0(login_client_t *c, login_login0_pkt *pkt) {
+    char query[256],  serial[32], access[32];
+    void *result;
+    char **row;
+    uint8_t resp = LOGIN_90_OK;
+    int banned;
+
+    /* Make sure the user isn't IP banned. */
+    if(banned == -1) {
+        send_large_msg(c, "\tEInternal Server Error.\n"
+                       "Please try again later.");
+        return -1;
+    }
+    else if(banned) {
+        send_large_msg(c, "\tEYou have been banned from this server.");
+        return -1;
+    }
+
+    /* Escape all the important strings. */
+    sylverant_db_escape_str(&conn, serial, pkt->serial, 8);
+    sylverant_db_escape_str(&conn, access, pkt->access_key, 8);
+
+    sprintf(query, "SELECT guildcard FROM dreamcast_clients WHERE "
+            "serial_number='%s' AND access_key='%s'", serial, access);
+
+    /* If we can't query the database, fail. */
+    if(sylverant_db_query(&conn, query)) {
+        send_large_msg(c, "\tEInternal Server Error.\n"
+                       "Please try again later.");
+        return -1;
+    }
+
+    result = sylverant_db_result_store(&conn);
+
+    if(!(row = sylverant_db_result_fetch(result))) {
+        /* We've not seen this client before, get them to send us a 0x92. */
+        resp = LOGIN_90_NEW_USER;
+    }
+
+    sylverant_db_result_free(result);
+
+    return send_simple(c, LOGIN_DC_LOGIN0_TYPE, resp);
+}
+
+static int handle_login3(login_client_t *c, login_dclogin_pkt *pkt) {
     uint32_t gc;
     char query[256], dc_id[32], serial[32], access[32];
     void *result;
@@ -123,7 +167,7 @@ static int handle_login(login_client_t *c, login_dclogin_pkt *pkt) {
 
 /* Handle a client's login request packet (yes, this function is the same as the
    one above, but it uses a different structure). */
-static int handle_v2login(login_client_t *c, login_dcv2login_pkt *pkt) {
+static int handle_logina(login_client_t *c, login_dcv2login_pkt *pkt) {
     uint32_t gc;
     char query[256], dc_id[32], serial[32], access[32];
     void *result;
@@ -472,20 +516,20 @@ int process_dclogin_packet(login_client_t *c, void *pkt) {
 
     switch(type) {
         case LOGIN_DC_LOGIN0_TYPE:
-            /* XXXX: Do something with this sometime. */
-            return send_simple(c, LOGIN_DC_LOGIN0_TYPE, 1);
+            /* XXXX: Hey! this does something now! */
+            return handle_login0(c, (login_login0_pkt *)pkt);
 
         case LOGIN_DC_LOGIN2_TYPE:
             /* XXXX: Do something with this sometime. */
-            return send_simple(c, LOGIN_DC_LOGIN2_TYPE, 1);
+            return send_simple(c, LOGIN_DC_LOGIN2_TYPE, LOGIN_92_OK);
 
         case LOGIN_CLIENT_LOGIN_TYPE:
             /* XXXX: Figure this all out sometime. */
-            return handle_login(c, (login_dclogin_pkt *)pkt);
+            return handle_login3(c, (login_dclogin_pkt *)pkt);
 
         case LOGIN_DCV2_LOGINA_TYPE:
             /* XXXX: You had to switch packets on me, didn't you Sega? */
-            return handle_v2login(c, (login_dcv2login_pkt *)pkt);
+            return handle_logina(c, (login_dcv2login_pkt *)pkt);
 
         case LOGIN_DC_CHECKSUM_TYPE:
             /* XXXX: ??? */

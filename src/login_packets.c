@@ -186,12 +186,17 @@ static int send_large_msg_dc(login_client_t *c, char msg[]) {
     dc_login_large_msg_pkt *pkt = (dc_login_large_msg_pkt *)sendbuf;
     int size = 5 + strlen(msg);
 
+    /* Copy the message */
+    strcpy(pkt->message, msg);
+
+    /* Pad to a length divisible by 4 */
+    while(size & 0x03) {
+        sendbuf[size++] = 0;
+    }
+
     /* Fill in the header */
     pkt->hdr.dc.pkt_type = LOGIN_LARGE_MESSAGE_TYPE;
     pkt->hdr.dc.pkt_len = LE16(size);
-
-    /* Copy the message */
-    strcpy(pkt->message, msg);
 
     /* Send the packet away */
     return crypt_send(c, 5 + strlen(msg));

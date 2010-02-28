@@ -107,6 +107,15 @@ typedef struct login_login {
     };
 } PACKED login_login_pkt;
 
+/* The first login packet that DCv1 sends. */
+typedef struct login_login0 {
+    dc_pkt_header_t hdr;
+    char serial[8];
+    uint8_t padding1[9];
+    char access_key[8];
+    uint8_t padding[11];
+} PACKED login_login0_pkt;
+
 /* The login packet that the client sends to us (Dreamcast V1). */
 typedef struct login_dclogin {
     dc_pkt_header_t hdr;
@@ -518,7 +527,18 @@ typedef struct dc_quest_chunk {
 #define LOGIN_DC_QUEST_FILE_LENGTH          0x003C
 #define LOGIN_DC_QUEST_CHUNK_LENGTH         0x0418
 
-/* Responses to login packets. */
+/* Responses to login packets... */
+/* DCv1 - Responses to Packet 0x90. */
+#define LOGIN_90_OK                         0
+#define LOGIN_90_NEW_USER                   1
+#define LOGIN_90_OK2                        2
+#define LOGIN_90_BAD_SNAK                   3
+
+/* DCv1 - Responses to Packet 0x92. */
+#define LOGIN_92_BAD_SNAK                   0
+#define LOGIN_92_OK                         1
+
+/* DCv2/PC - Responses to Packet 0x9A. */
 #define LOGIN_9A_OK                         0
 #define LOGIN_9A_NEW_USER                   1
 #define LOGIN_9A_OK2                        2
