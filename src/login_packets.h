@@ -164,12 +164,20 @@ typedef struct dc_login_redirect {
     uint8_t padding2[2];
 } PACKED dc_login_redirect_pkt;
 
-/* The packet sent to display a large message to clients. */
-typedef struct login_largemsg {
+/* The packet sent to display a large message to clients (Blue Burst). */
+typedef struct login_largemsg_bb {
     bb_pkt_header_t hdr;
-    uint8_t lang[4];
     uint8_t message[];
-} PACKED login_large_msg_pkt;
+} PACKED bb_login_large_msg_pkt;
+
+/* The packet sent to display a large message to clients (Dreamcast/GC/PC). */
+typedef struct login_largemsg_dc {
+    union {
+        dc_pkt_header_t dc;
+        pc_pkt_header_t pc;
+    } hdr;
+    uint8_t message[];
+} PACKED dc_login_large_msg_pkt;
 
 /* The packet sent as a timestamp (Blue Burst). */
 typedef struct bb_login_timestamp {
@@ -509,6 +517,14 @@ typedef struct dc_quest_chunk {
 #define LOGIN_PC_QUEST_INFO_LENGTH          0x024C
 #define LOGIN_DC_QUEST_FILE_LENGTH          0x003C
 #define LOGIN_DC_QUEST_CHUNK_LENGTH         0x0418
+
+/* Responses to login packets. */
+#define LOGIN_9A_OK                         0
+#define LOGIN_9A_NEW_USER                   1
+#define LOGIN_9A_OK2                        2
+#define LOGIN_9A_BAD_ACCESS                 3
+#define LOGIN_9A_BAD_SERIAL                 4
+#define LOGIN_9A_ERROR                      5
 
 /* This must be placed into the copyright field in the BB welcome packet. */
 const static char login_bb_welcome_copyright[] =

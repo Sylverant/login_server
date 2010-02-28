@@ -18,6 +18,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <arpa/inet.h>
+#include <sys/socket.h>
 
 #include <sylverant/debug.h>
 #include <sylverant/database.h>
@@ -27,6 +29,41 @@
 #include "login_packets.h"
 
 extern sylverant_quest_list_t qlist;
+
+/* Check if an IP has been IP banned from the server. */
+static int is_ip_banned(in_addr_t ip) {
+    char ipstr[INET_ADDRSTRLEN];
+    char ipstr2[INET_ADDRSTRLEN << 2];
+    char query[256];
+    void *result;
+    char **row;
+    int rv = 0;
+
+    /* IPs are stored in the database as strings, so we need a string here. */
+    inet_ntop(AF_INET, &ip, ipstr, INET_ADDRSTRLEN);
+
+    /* Escape the string, even though it should be safe. */
+    sylverant_db_escape_str(&conn, ipstr2, ipstr, strlen(ipstr));
+
+    /* Fill in the query. */
+    sprintf(query, "SELECT * FROM ip_bans WHERE ipinfo='%s'", ipstr2);
+
+    /* If we can't query the database, fail. */
+    if(sylverant_db_query(&conn, query)) {
+        return -1;
+    }
+
+    /* Grab the results. */
+    result = sylverant_db_result_store(&conn);
+
+    /* If there is a result, then the user is banned. */
+    if((row = sylverant_db_result_fetch(result))) {
+        rv = 1;
+    }
+
+    sylverant_db_result_free(result);
+    return rv;
+}
 
 /* Handle a client's login request packet. */
 static int handle_login(login_client_t *c, login_dclogin_pkt *pkt) {
@@ -91,6 +128,16 @@ static int handle_v2login(login_client_t *c, login_dcv2login_pkt *pkt) {
     char query[256], dc_id[32], serial[32], access[32];
     void *result;
     char **row;
+    int banned = is_ip_banned(c->ip_addr);
+
+    /* Make sure the user isn't IP banned. */
+    if(banned == -1) {
+        return send_simple(c, LOGIN_DCV2_LOGINA_TYPE, LOGIN_9A_ERROR);
+    }
+    else if(banned) {
+        send_large_msg(c, "\tEYou have been banned from this server.");
+        return -1;
+    }
 
     /* Escape all the important strings. */
     sylverant_db_escape_str(&conn, dc_id, pkt->dc_id, 8);
@@ -109,7 +156,7 @@ static int handle_v2login(login_client_t *c, login_dcv2login_pkt *pkt) {
 
     /* If we can't query the database, fail. */
     if(sylverant_db_query(&conn, query)) {
-        return -1;
+        return send_simple(c, LOGIN_DCV2_LOGINA_TYPE, LOGIN_9A_ERROR);
     }
 
     result = sylverant_db_result_store(&conn);
@@ -125,7 +172,7 @@ static int handle_v2login(login_client_t *c, login_dcv2login_pkt *pkt) {
 
         /* If we can't query the database, fail. */
         if(sylverant_db_query(&conn, query)) {
-            return -1;
+            return send_simple(c, LOGIN_DCV2_LOGINA_TYPE, LOGIN_9A_ERROR);
         }
 
         result = sylverant_db_result_store(&conn);
@@ -140,12 +187,12 @@ static int handle_v2login(login_client_t *c, login_dcv2login_pkt *pkt) {
                     "WHERE guildcard='%u'", serial, gc);
 
             if(sylverant_db_query(&conn, query)) {
-                return -1;
+                return send_simple(c, LOGIN_DCV2_LOGINA_TYPE, LOGIN_9A_ERROR);
             }
         }
         else {
             /* Disconnect the unregistered user. */
-            return -1;
+            return send_simple(c, LOGIN_DCV2_LOGINA_TYPE, LOGIN_9A_BAD_ACCESS);
         }
     }
     else {
@@ -155,7 +202,7 @@ static int handle_v2login(login_client_t *c, login_dcv2login_pkt *pkt) {
         sprintf(query, "INSERT INTO guildcards (account_id) VALUES (NULL)");
 
         if(sylverant_db_query(&conn, query)) {
-            return -1;
+            return send_simple(c, LOGIN_DCV2_LOGINA_TYPE, LOGIN_9A_ERROR);
         }
 
         /* Grab the new guildcard for the user. */
@@ -167,7 +214,7 @@ static int handle_v2login(login_client_t *c, login_dcv2login_pkt *pkt) {
                 "'%s')", gc, serial, access, dc_id);
 
         if(sylverant_db_query(&conn, query)) {
-            return -1;
+            return send_simple(c, LOGIN_DCV2_LOGINA_TYPE, LOGIN_9A_ERROR);
         }
     }
 
@@ -175,7 +222,7 @@ static int handle_v2login(login_client_t *c, login_dcv2login_pkt *pkt) {
 
     /* Force them to send us a 0x9D so we have their language code, since this
        packet doesn't have it. */
-    return send_simple(c, LOGIN_DCV2_LOGINA_TYPE, 2);
+    return send_simple(c, LOGIN_DCV2_LOGINA_TYPE, LOGIN_9A_OK2);
 }
 
 /* The next few functions look the same pretty much... All added for gamecube

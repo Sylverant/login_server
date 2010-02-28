@@ -152,17 +152,13 @@ int send_dc_welcome(login_client_t *c, uint32_t svect, uint32_t cvect) {
 }
 
 /* Send a large message packet to the given client. */
-int send_large_msg(login_client_t *c, char msg[]) {
-    login_large_msg_pkt *pkt = (login_large_msg_pkt *)sendbuf;
+static int send_large_msg_bb(login_client_t *c, char msg[]) {
+    bb_login_large_msg_pkt *pkt = (bb_login_large_msg_pkt *)sendbuf;
     int slen = strlen(msg), i;
-    uint16_t len = 0x0C + (slen << 1);
+    uint16_t len = 0x08 + (slen << 1);
 
     /* Clear the packet first. */
-    memset(pkt, 0, sizeof(login_large_msg_pkt));
-
-    /* Fill in the language marker for English. */
-    pkt->lang[0] = '\t';
-    pkt->lang[2] = 'E';
+    memset(pkt, 0, sizeof(bb_login_large_msg_pkt));
 
     /* Fill in the message */
     for(i = 0; i < slen; ++i) {
@@ -184,6 +180,75 @@ int send_large_msg(login_client_t *c, char msg[]) {
 
     /* Send the packet away */
     return crypt_send(c, len);
+}
+
+static int send_large_msg_dc(login_client_t *c, char msg[]) {
+    dc_login_large_msg_pkt *pkt = (dc_login_large_msg_pkt *)sendbuf;
+    int size = 5 + strlen(msg);
+
+    /* Fill in the header */
+    pkt->hdr.dc.pkt_type = LOGIN_LARGE_MESSAGE_TYPE;
+    pkt->hdr.dc.pkt_len = LE16(size);
+
+    /* Copy the message */
+    strcpy(pkt->message, msg);
+
+    /* Send the packet away */
+    return crypt_send(c, 5 + strlen(msg));
+}
+
+static int send_large_msg_pc(login_client_t *c, char msg[]) {
+    dc_login_large_msg_pkt *pkt = (dc_login_large_msg_pkt *)sendbuf;
+    int size = 4;
+    iconv_t ic = iconv_open("UTF-16LE", "SHIFT_JIS");
+    size_t in, out;
+    char *inptr, *outptr;
+
+    if(ic == (iconv_t)-1) {
+        perror("iconv_open");
+        return -1;
+    }
+
+    /* Convert to UTF-16 */
+    in = strlen(msg) + 1;
+    out = 65524;
+    inptr = msg;
+    outptr = pkt->message;
+    iconv(ic, &inptr, &in, &outptr, &out);
+
+    /* Figure out how long the packet is */
+    size += 65524 - out;
+
+    /* Pad to a length divisible by 4 */
+    while(size & 0x03) {
+        sendbuf[size++] = 0;
+    }
+
+    /* Fill in the header */
+    pkt->hdr.pc.pkt_type = LOGIN_LARGE_MESSAGE_TYPE;
+    pkt->hdr.pc.flags = 0;
+    pkt->hdr.pc.pkt_len = LE16(size);
+
+    /* Send the packet away */
+    return crypt_send(c, size);
+}
+
+int send_large_msg(login_client_t *c, char msg[]) {
+    /* Call the appropriate function. */
+    switch(c->type) {
+        case CLIENT_TYPE_BB_LOGIN:
+        case CLIENT_TYPE_BB_CHARACTER:
+            return send_large_msg_bb(c, msg);
+
+        case CLIENT_TYPE_DC:
+        case CLIENT_TYPE_GC:
+            return send_large_msg_dc(c, msg);
+
+        case CLIENT_TYPE_PC:
+            return send_large_msg_pc(c, msg);
+    }
+
+    return -1;
 }
 
 /* Send the Dreamcast security packet to the given client. */
