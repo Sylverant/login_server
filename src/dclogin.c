@@ -277,7 +277,15 @@ static int handle_gchlcheck(login_client_t *c, login_gc_hlcheck_pkt *pkt) {
     void *result;
     char **row;
     unsigned char hash[16];
-    int i;
+    int i, banned;
+
+    /* Make sure the user isn't IP banned. */
+    if(banned == -1) {
+        return send_simple(c, LOGIN_DCV2_LOGINA_TYPE, LOGIN_DB_CONN_ERROR);
+    }
+    else if(banned) {
+        return send_simple(c, LOGIN_DCV2_LOGINA_TYPE, LOGIN_DB_SUSPENDED);
+    }
 
     /* Escape all the important strings. */
     sylverant_db_escape_str(&conn, serial, pkt->serial, 8);
@@ -288,7 +296,7 @@ static int handle_gchlcheck(login_client_t *c, login_gc_hlcheck_pkt *pkt) {
 
     /* If we can't query the database, fail. */
     if(sylverant_db_query(&conn, query)) {
-        return -1;
+        return send_simple(c, LOGIN_DCV2_LOGINA_TYPE, LOGIN_DB_CONN_ERROR);
     }
 
     result = sylverant_db_result_store(&conn);
@@ -304,13 +312,13 @@ static int handle_gchlcheck(login_client_t *c, login_gc_hlcheck_pkt *pkt) {
                 gc);
 
         if(sylverant_db_query(&conn, query)) {
-            return -1;
+            return send_simple(c, LOGIN_DCV2_LOGINA_TYPE, LOGIN_DB_CONN_ERROR);
         }
 
         result = sylverant_db_result_store(&conn);
 
         if(!(row = sylverant_db_result_fetch(result))) {
-            return -1;
+            return send_simple(c, LOGIN_DCV2_LOGINA_TYPE, LOGIN_DB_CONN_ERROR);
         }
 
         account = (uint32_t)strtoul(row[0], NULL, 0);
@@ -321,7 +329,7 @@ static int handle_gchlcheck(login_client_t *c, login_gc_hlcheck_pkt *pkt) {
 
         /* If we can't query the DB, fail. */
         if(sylverant_db_query(&conn, query)) {
-            return -1;
+            return send_simple(c, LOGIN_DCV2_LOGINA_TYPE, LOGIN_DB_CONN_ERROR);
         }
 
         result = sylverant_db_result_store(&conn);
@@ -342,7 +350,7 @@ static int handle_gchlcheck(login_client_t *c, login_gc_hlcheck_pkt *pkt) {
 
             if(!strcmp(row[0], query)) {
                 sylverant_db_result_free(result);
-                return send_simple(c, LOGIN_DCV2_LOGINA_TYPE, 1);
+                return send_simple(c, LOGIN_DCV2_LOGINA_TYPE, LOGIN_DB_OK);
             }
         }
     }
@@ -350,7 +358,7 @@ static int handle_gchlcheck(login_client_t *c, login_gc_hlcheck_pkt *pkt) {
     sylverant_db_result_free(result);
 
     /* If we get here, we didn't find them, bail out. */
-    return -1;
+    return send_simple(c, LOGIN_DCV2_LOGINA_TYPE, LOGIN_DB_CONN_ERROR);
 }
 
 static int handle_gcloginc(login_client_t *c, login_gc_loginc_pkt *pkt) {

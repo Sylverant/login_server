@@ -546,6 +546,20 @@ typedef struct dc_quest_chunk {
 #define LOGIN_9A_BAD_SERIAL                 4
 #define LOGIN_9A_ERROR                      5
 
+/* Gamecube - Responses to Packet 0xDB. */
+#define LOGIN_DB_OK                         0
+#define LOGIN_DB_NEW_USER                   1
+#define LOGIN_DB_OK2                        2
+#define LOGIN_DB_BAD_ACCESS                 3
+#define LOGIN_DB_BAD_SERIAL                 4
+#define LOGIN_DB_NET_ERROR                  5   /* Also 6, 9, 10, 20-255. */
+#define LOGIN_DB_NO_HL                      7   /* Also 18. */
+#define LOGIN_DB_EXPIRED_HL                 8   /* Also 17. */
+#define LOGIN_DB_BAD_HL                     11  /* Also 12, 13 - Diff errnos. */
+#define LOGIN_DB_CONN_ERROR                 14
+#define LOGIN_DB_SUSPENDED                  15  /* Also 16. */
+#define LOGIN_DB_MAINTENANCE                19
+
 /* This must be placed into the copyright field in the BB welcome packet. */
 const static char login_bb_welcome_copyright[] =
     "Phantasy Star Online Blue Burst Game Server. "
