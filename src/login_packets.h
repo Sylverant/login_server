@@ -546,6 +546,10 @@ typedef struct dc_quest_chunk {
 #define LOGIN_9A_BAD_SERIAL                 4
 #define LOGIN_9A_ERROR                      5
 
+/* DCv2/PC - Responses to Packet 0x9C. */
+#define LOGIN_9CV2_REG_FAIL                 0
+#define LOGIN_9CV2_OK                       1
+
 /* Gamecube - Responses to Packet 0xDB. */
 #define LOGIN_DB_OK                         0
 #define LOGIN_DB_NEW_USER                   1
@@ -559,6 +563,10 @@ typedef struct dc_quest_chunk {
 #define LOGIN_DB_CONN_ERROR                 14
 #define LOGIN_DB_SUSPENDED                  15  /* Also 16. */
 #define LOGIN_DB_MAINTENANCE                19
+
+/* Gamecube - Responses to Packet 0x9C. */
+#define LOGIN_9CGC_BAD_PWD                  0
+#define LOGIN_9CGC_OK                       1
 
 /* This must be placed into the copyright field in the BB welcome packet. */
 const static char login_bb_welcome_copyright[] =
