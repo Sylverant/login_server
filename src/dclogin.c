@@ -39,14 +39,10 @@ static int is_ip_banned(in_addr_t ip) {
     char **row;
     int rv = 0;
 
-    /* IPs are stored in the database as strings, so we need a string here. */
-    inet_ntop(AF_INET, &ip, ipstr, INET_ADDRSTRLEN);
-
-    /* Escape the string, even though it should be safe. */
-    sylverant_db_escape_str(&conn, ipstr2, ipstr, strlen(ipstr));
-
     /* Fill in the query. */
-    sprintf(query, "SELECT * FROM ip_bans WHERE ipinfo='%s'", ipstr2);
+    sprintf(query, "SELECT * FROM ip_bans NATURAL JOIN bans WHERE addr='%u' "
+                   "AND enddate >= NOW() AND startdate <= NOW()",
+            (unsigned int)ip);
 
     /* If we can't query the database, fail. */
     if(sylverant_db_query(&conn, query)) {

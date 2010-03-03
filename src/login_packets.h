@@ -383,23 +383,23 @@ typedef struct login_gc_loginc {
 /* Login packet type 0x9D and 0x9E (Gamecube/PC/Dreamcast). */
 typedef struct login_login_de {
     dc_pkt_header_t hdr;
-    uint8_t padding1[2];
-    uint8_t ffffffffffff[6];
-    uint8_t padding2[8];
+    uint32_t tag;                       /* Junk here. */
+    uint32_t guildcard;                 /* Junk here. */
+    uint8_t padding1[8];
     uint8_t version;
-    uint8_t padding3[4];
+    uint8_t padding2[4];
     uint8_t language_code;
-    uint8_t padding4[34];
+    uint8_t padding3[34];
     char serial[8];
-    uint8_t padding5[8];
+    uint8_t padding4[8];
     char access_key[12];
-    uint8_t padding6[4];
+    uint8_t padding5[4];
     char serial2[8];
-    uint8_t padding7[40];
+    uint8_t padding6[40];
     char access_key2[12];
-    uint8_t padding8[36];
+    uint8_t padding7[36];
     char name[16];
-    uint8_t padding9[132];
+    uint8_t padding8[132];
 } PACKED login_login_de_pkt;
 
 /* The packet used to send the quest list (Dreamcast). */
