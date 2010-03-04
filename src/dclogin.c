@@ -18,6 +18,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <arpa/inet.h>
 #include <sys/socket.h>
 
@@ -32,17 +33,44 @@ extern sylverant_quest_list_t qlist;
 
 /* Check if an IP has been IP banned from the server. */
 static int is_ip_banned(in_addr_t ip) {
-    char ipstr[INET_ADDRSTRLEN];
-    char ipstr2[INET_ADDRSTRLEN << 2];
     char query[256];
     void *result;
     char **row;
     int rv = 0;
 
     /* Fill in the query. */
-    sprintf(query, "SELECT * FROM ip_bans NATURAL JOIN bans WHERE addr='%u' "
-                   "AND enddate >= NOW() AND startdate <= NOW()",
-            (unsigned int)ip);
+    sprintf(query, "SELECT * FROM ip_bans NATURAL JOIN bans WHERE addr = '%u' "
+                   "AND enddate >= UNIX_TIMESTAMP() "
+                   "AND startdate <= UNIX_TIMESTAMP()", (unsigned int)ip);
+
+    /* If we can't query the database, fail. */
+    if(sylverant_db_query(&conn, query)) {
+        return -1;
+    }
+
+    /* Grab the results. */
+    result = sylverant_db_result_store(&conn);
+
+    /* If there is a result, then the user is banned. */
+    if((row = sylverant_db_result_fetch(result))) {
+        rv = 1;
+    }
+
+    sylverant_db_result_free(result);
+    return rv;
+}
+
+/* Check if a user is banned by guildcard. */
+static int is_gc_banned(uint32_t gc) {
+    char query[256];
+    void *result;
+    char **row;
+    int rv = 0;
+
+    /* Fill in the query. */
+    sprintf(query, "SELECT * FROM guildcard_bans NATURAL JOIN bans WHERE "
+                   "guildcard = '%u' AND enddate >= UNIX_TIMESTAMP() AND "
+                   "startdate <= UNIX_TIMESTAMP()", (unsigned int)gc);
 
     /* If we can't query the database, fail. */
     if(sylverant_db_query(&conn, query)) {
@@ -67,7 +95,7 @@ static int handle_login0(login_client_t *c, login_login0_pkt *pkt) {
     void *result;
     char **row;
     uint8_t resp = LOGIN_90_OK;
-    int banned;
+    int banned = is_ip_banned(c->ip_addr);
 
     /* Make sure the user isn't IP banned. */
     if(banned == -1) {
@@ -111,6 +139,7 @@ static int handle_login3(login_client_t *c, login_dclogin_pkt *pkt) {
     char query[256], dc_id[32], serial[32], access[32];
     void *result;
     char **row;
+    int banned;
 
     c->language_code = pkt->language_code;
 
@@ -125,6 +154,8 @@ static int handle_login3(login_client_t *c, login_dclogin_pkt *pkt) {
 
     /* If we can't query the database, fail. */
     if(sylverant_db_query(&conn, query)) {
+        send_large_msg(c, "\tEInternal Server Error.\n"
+                       "Please try again later.");
         return -1;
     }
 
@@ -142,6 +173,8 @@ static int handle_login3(login_client_t *c, login_dclogin_pkt *pkt) {
         sprintf(query, "INSERT INTO guildcards (account_id) VALUES (NULL)");
 
         if(sylverant_db_query(&conn, query)) {
+            send_large_msg(c, "\tEInternal Server Error.\n"
+                           "Please try again later.");
             return -1;
         }
 
@@ -154,8 +187,23 @@ static int handle_login3(login_client_t *c, login_dclogin_pkt *pkt) {
                 "'%s')", gc, serial, access, dc_id);
 
         if(sylverant_db_query(&conn, query)) {
+            send_large_msg(c, "\tEInternal Server Error.\n"
+                           "Please try again later.");
             return -1;
         }
+    }
+
+    /* Make sure the guildcard isn't banned. */
+    banned = is_gc_banned(gc);
+
+    if(banned == -1) {
+        send_large_msg(c, "\tEInternal Server Error.\n"
+                       "Please try again later.");
+        return -1;
+    }
+    else if(banned) {
+        send_large_msg(c, "\tEYou have been banned from this server.");
+        return -1;
     }
 
     return send_dc_security(c, gc, NULL, 0);
@@ -258,6 +306,18 @@ static int handle_logina(login_client_t *c, login_dcv2login_pkt *pkt) {
         }
     }
 
+    /* Make sure the guildcard isn't banned. */
+    banned = is_gc_banned(gc);
+
+    if(banned == -1) {
+        return send_simple(c, LOGIN_DCV2_LOGINA_TYPE, LOGIN_9A_ERROR);
+    }
+    else if(banned) {
+        send_large_msg(c, "\tEYou have been banned from this server.");
+        return -1;
+    }
+
+
     c->guildcard = gc;
 
     /* Force them to send us a 0x9D so we have their language code, since this
@@ -273,7 +333,7 @@ static int handle_gchlcheck(login_client_t *c, login_gc_hlcheck_pkt *pkt) {
     void *result;
     char **row;
     unsigned char hash[16];
-    int i, banned;
+    int i, banned = is_ip_banned(c->ip_addr);
 
     /* Make sure the user isn't IP banned. */
     if(banned == -1) {
@@ -298,12 +358,21 @@ static int handle_gchlcheck(login_client_t *c, login_gc_hlcheck_pkt *pkt) {
     result = sylverant_db_result_store(&conn);
 
     if((row = sylverant_db_result_fetch(result))) {
-        /* The client has at least registered, check the password. */
         gc = (uint32_t)strtoul(row[0], NULL, 0);
-
         sylverant_db_result_free(result);
 
-        /* We need the account to do that though... */
+        /* Make sure the guildcard isn't banned. */
+        banned = is_gc_banned(gc);
+
+        if(banned == -1) {
+            return send_simple(c, LOGIN_DCV2_LOGINA_TYPE, LOGIN_DB_CONN_ERROR);
+        }
+        else if(banned) {
+            return send_simple(c, LOGIN_DCV2_LOGINA_TYPE, LOGIN_DB_SUSPENDED);
+        }
+
+        /* The client has at least registered, check the password...
+           We need the account to do that though. */
         sprintf(query, "SELECT account_id FROM guildcards WHERE guildcard='%u'",
                 gc);
 
