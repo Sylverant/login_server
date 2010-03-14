@@ -107,7 +107,7 @@ static int send_ban_msg(login_client_t *c, time_t until, const char *reason) {
     }
     else {
         gmtime_r(&until, &cooked);
-        sprintf(string, "%02u:%02u %u:%02u:%02u UTC", cooked.tm_hour,
+        sprintf(string, "%s%02u:%02u UTC %u.%02u.%02u", string, cooked.tm_hour,
                 cooked.tm_min, cooked.tm_year + 1900, cooked.tm_mon + 1,
                 cooked.tm_mday);
     }
@@ -267,7 +267,7 @@ static int handle_logina(login_client_t *c, login_dcv2login_pkt *pkt) {
                 serial, access);
     }
     else {
-        sprintf(query, "SELECT guildcard FROM dreamcast_clients WHERE "
+        sprintf(query, "SELECT guildcard FROM pc_clients WHERE "
                 "serial_number='%s' AND access_key='%s'", serial, access);
     }
 
@@ -284,35 +284,15 @@ static int handle_logina(login_client_t *c, login_dcv2login_pkt *pkt) {
         sylverant_db_result_free(result);
     }
     else if(c->type == CLIENT_TYPE_PC) {
-        sprintf(query, "SELECT guildcard FROM dreamcast_clients WHERE "
-                "access_key='%s' AND serial_number='0'", access);
-
-        /* If we can't query the database, fail. */
-        if(sylverant_db_query(&conn, query)) {
-            return send_simple(c, LOGIN_DCV2_LOGINA_TYPE, LOGIN_9A_ERROR);
-        }
-
-        result = sylverant_db_result_store(&conn);
-
-        if((row = sylverant_db_result_fetch(result))) {
-            /* We have seen this client before, save their guildcard for
-               use and set the serial number. */
-            gc = (uint32_t)strtoul(row[0], NULL, 0);
-            sylverant_db_result_free(result);
-
-            sprintf(query, "UPDATE dreamcast_clients SET serial_number='%s' "
-                    "WHERE guildcard='%u'", serial, gc);
-
-            if(sylverant_db_query(&conn, query)) {
-                return send_simple(c, LOGIN_DCV2_LOGINA_TYPE, LOGIN_9A_ERROR);
-            }
-        }
-        else {
-            /* Disconnect the unregistered user. */
-            return send_simple(c, LOGIN_DCV2_LOGINA_TYPE, LOGIN_9A_BAD_ACCESS);
-        }
+        /* If we're here, then that means either the PSOPC user is not
+           registered or they've put their information in wrong. Disconnect them
+           so that they can fix that problem. */
+        sylverant_db_result_free(result);
+        return send_simple(c, LOGIN_DCV2_LOGINA_TYPE, LOGIN_9A_BAD_SERIAL);
     }
     else {
+        /* If we get here, we have a PSOv2 (DC) user that isn't known to the
+           server yet. Give them a nice fresh guildcard. */
         sylverant_db_result_free(result);
 
         /* Assign a nice fresh new guildcard number to the client. */
