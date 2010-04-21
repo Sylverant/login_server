@@ -121,7 +121,7 @@ void destroy_connection(login_client_t *c) {
 /* Read data from a client that is connected to any port. */
 int read_from_client(login_client_t *c) {
     ssize_t sz;
-    uint16_t pkt_sz;
+    uint16_t pkt_sz = 0;
     int rv = 0;
     unsigned char *rbp;
     void *tmp;
@@ -145,11 +145,10 @@ int read_from_client(login_client_t *c) {
 
     sz += c->recvbuf_cur;
     c->recvbuf_cur = 0;
+    rbp = recvbuf;
 
     /* As long as what we have is long enough, decrypt it. */
     if(sz >= c->hdr_size) {
-        rbp = recvbuf;
-
         while(sz >= c->hdr_size && rv == 0) {
             /* Decrypt the packet header so we know what exactly we're looking
                for, in terms of packet length. */

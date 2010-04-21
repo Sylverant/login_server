@@ -19,12 +19,14 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <ctype.h>
 #include <arpa/inet.h>
 #include <sys/socket.h>
 
 #include <sylverant/debug.h>
 #include <sylverant/database.h>
 #include <sylverant/quest.h>
+#include <sylverant/md5.h>
 
 #include "login.h"
 #include "login_packets.h"
@@ -234,6 +236,26 @@ static int handle_login3(login_client_t *c, login_dclogin_pkt *pkt) {
         return -1;
     }
 
+    /* Check if the user is a GM or not. */
+    sprintf(query, "SELECT isgm FROM account_data NATURAL JOIN guildcards "
+            "WHERE guildcard='%u'", gc);
+
+    if(sylverant_db_query(&conn, query)) {
+        send_large_msg(c, "\tEInternal Server Error.\n"
+                       "Please try again later.");
+        return -1;
+    }
+
+    result = sylverant_db_result_store(&conn);
+
+    if(result) {
+        if((row = sylverant_db_result_fetch(result))) {
+            c->is_gm = atoi(row[0]);
+        }
+
+        sylverant_db_result_free(result);
+    }
+
     return send_dc_security(c, gc, NULL, 0);
 }
 
@@ -326,6 +348,23 @@ static int handle_logina(login_client_t *c, login_dcv2login_pkt *pkt) {
         return -1;
     }
 
+    /* Check if the user is a GM or not. */
+    sprintf(query, "SELECT isgm FROM account_data NATURAL JOIN guildcards "
+            "WHERE guildcard='%u'", gc);
+
+    if(sylverant_db_query(&conn, query)) {
+        return send_simple(c, LOGIN_DCV2_LOGINA_TYPE, LOGIN_9A_ERROR);
+    }
+
+    result = sylverant_db_result_store(&conn);
+
+    if(result) {
+        if((row = sylverant_db_result_fetch(result))) {
+            c->is_gm = atoi(row[0]);
+        }
+
+        sylverant_db_result_free(result);
+    }
 
     c->guildcard = gc;
 
@@ -337,7 +376,7 @@ static int handle_logina(login_client_t *c, login_dcv2login_pkt *pkt) {
 /* The next few functions look the same pretty much... All added for gamecube
    support. */
 static int handle_gchlcheck(login_client_t *c, login_gc_hlcheck_pkt *pkt) {
-    uint32_t account, time, gc;
+    uint32_t account, gc;
     char query[256], serial[32], access[32];
     void *result;
     char **row;
@@ -401,8 +440,8 @@ static int handle_gchlcheck(login_client_t *c, login_gc_hlcheck_pkt *pkt) {
         account = (uint32_t)strtoul(row[0], NULL, 0);
         sylverant_db_result_free(result);
 
-        sprintf(query, "SELECT password, regtime FROM account_data WHERE "
-                "account_id='%u'", account);
+        sprintf(query, "SELECT isgm FROM account_data WHERE account_id='%u'",
+                account);
 
         /* If we can't query the DB, fail. */
         if(sylverant_db_query(&conn, query)) {
@@ -412,23 +451,8 @@ static int handle_gchlcheck(login_client_t *c, login_gc_hlcheck_pkt *pkt) {
         result = sylverant_db_result_store(&conn);
 
         if((row = sylverant_db_result_fetch(result))) {
-            /* Check the password. */
-            sprintf(query, "%s_%s_salt", pkt->password, row[1]);
-            md5(query, strlen(query), hash);
-
-            query[0] = '\0';
-            for(i = 0; i < 16; ++i) {
-                sprintf(query, "%s%02x", query, hash[i]);
-            }
-
-            for(i = 0; i < strlen(row[0]); ++i) {
-                row[0][i] = tolower(row[0][i]);
-            }
-
-            if(!strcmp(row[0], query)) {
-                sylverant_db_result_free(result);
-                return send_simple(c, LOGIN_DCV2_LOGINA_TYPE, LOGIN_DB_OK);
-            }
+            c->is_gm = atoi(row[0]);
+            return send_simple(c, LOGIN_DCV2_LOGINA_TYPE, LOGIN_DB_OK);
         }
     }
 
@@ -439,7 +463,7 @@ static int handle_gchlcheck(login_client_t *c, login_gc_hlcheck_pkt *pkt) {
 }
 
 static int handle_gcloginc(login_client_t *c, login_gc_loginc_pkt *pkt) {
-    uint32_t account, time, gc;
+    uint32_t account, gc;
     char query[256], serial[32], access[32];
     void *result;
     char **row;
@@ -496,7 +520,7 @@ static int handle_gcloginc(login_client_t *c, login_gc_loginc_pkt *pkt) {
         if((row = sylverant_db_result_fetch(result))) {
             /* Check the password. */
             sprintf(query, "%s_%s_salt", pkt->password, row[1]);
-            md5(query, strlen(query), hash);
+            md5((unsigned char *)query, strlen(query), hash);
 
             query[0] = '\0';
             for(i = 0; i < 16; ++i) {
@@ -509,7 +533,10 @@ static int handle_gcloginc(login_client_t *c, login_gc_loginc_pkt *pkt) {
 
             if(!strcmp(row[0], query)) {
                 sylverant_db_result_free(result);
-                return send_simple(c, LOGIN_GC_LOGINC_TYPE, 1);
+                return send_simple(c, LOGIN_GC_LOGINC_TYPE, LOGIN_9CGC_OK);
+            }
+            else {
+                return send_simple(c, LOGIN_GC_LOGINC_TYPE, LOGIN_9CGC_BAD_PWD);
             }
         }
     }

@@ -187,7 +187,7 @@ static int send_large_msg_dc(login_client_t *c, char msg[]) {
     int size = 5 + strlen(msg);
 
     /* Copy the message */
-    strcpy(pkt->message, msg);
+    strcpy((char *)pkt->message, msg);
 
     /* Pad to a length divisible by 4 */
     while(size & 0x03) {
@@ -218,7 +218,7 @@ static int send_large_msg_pc(login_client_t *c, char msg[]) {
     in = strlen(msg) + 1;
     out = 65524;
     inptr = msg;
-    outptr = pkt->message;
+    outptr = (char *)pkt->message;
     iconv(ic, &inptr, &in, &outptr, &out);
 
     /* Figure out how long the packet is */
@@ -350,11 +350,6 @@ int send_redirect(login_client_t *c, in_addr_t ip, uint16_t port) {
    users. */
 int send_selective_redirect(login_client_t *c, in_addr_t ip, uint16_t port) {
     dc_login_redirect_pkt *pkt = (dc_login_redirect_pkt *)sendbuf;
-
-    /* Verify we got the sendbuf. */
-    if(!sendbuf) {
-        return -1;
-    }
 
     /* Wipe the packet */
     memset(pkt, 0, 0xB0);
@@ -686,15 +681,7 @@ static int send_ship_list_dc(login_client_t *c) {
     void *result;
     char **row;
     uint32_t ship_id, players;
-    int i, len = 0x20;
-    iconv_t ic = iconv_open("SHIFT_JIS", "ASCII");
-    size_t in, out;
-    char *inptr, *outptr;
-
-    if(ic == (iconv_t)-1) {
-        perror("iconv_open");
-        return -1;
-    }
+    int i, len = 0x20, gm_only;
 
     /* Clear the base packet */
     memset(pkt, 0, sizeof(dc_login_ship_list_pkt));
@@ -712,7 +699,7 @@ static int send_ship_list_dc(login_client_t *c) {
     num_ships = 1;
 
     /* Get ready to query the database */
-    sprintf(query, "SELECT ship_id, name, players FROM online_ships");
+    sprintf(query, "SELECT ship_id, name, players, gm_only FROM online_ships");
 
     /* Query the database and see what we've got */
     if(sylverant_db_query(&conn, query)) {
@@ -727,31 +714,28 @@ static int send_ship_list_dc(login_client_t *c) {
 
     /* As long as we have some rows, go */
     while((row = sylverant_db_result_fetch(result))) {
-        /* Clear out the ship information */
-        memset(&pkt->entries[num_ships], 0, 0x1C);
+        gm_only = atoi(row[3]);
 
-        /* Grab info from the row */
-        ship_id = (uint32_t)strtoul(row[0], NULL, 0);
-        players = (uint32_t)strtoul(row[2], NULL, 0);
+        if(!gm_only || c->is_gm) {
+            /* Clear out the ship information */
+            memset(&pkt->entries[num_ships], 0, 0x1C);
 
-        /* Fill in what we have */
-        pkt->entries[num_ships].menu_id = LE32(0x00120000);
-        pkt->entries[num_ships].item_id = LE32(ship_id);
-        pkt->entries[num_ships].flags = LE16(0x0000);
+            /* Grab info from the row */
+            ship_id = (uint32_t)strtoul(row[0], NULL, 0);
+            players = (uint32_t)strtoul(row[2], NULL, 0);
 
-        /* Create the name string (ASCII) */
-        sprintf(tmp, "%s (%d)", row[1], players);
+            /* Fill in what we have */
+            pkt->entries[num_ships].menu_id = LE32(0x00120000);
+            pkt->entries[num_ships].item_id = LE32(ship_id);
+            pkt->entries[num_ships].flags = LE16(0x0000);
 
-        /* And convert to Shift-JIS */
-        in = strlen(tmp);
-        out = 0x12;
-        inptr = tmp;
-        outptr = pkt->entries[num_ships].name;
-        iconv(ic, &inptr, &in, &outptr, &out);
+            /* Create the name string */
+            sprintf(pkt->entries[num_ships].name, "%s (%d)", row[1], players);
 
-        /* We're done with this ship, increment the counter */
-        ++num_ships;
-        len += 0x1C;
+            /* We're done with this ship, increment the counter */
+            ++num_ships;
+            len += 0x1C;
+        }
     }
 
     sylverant_db_result_free(result);
@@ -780,13 +764,7 @@ static int send_ship_list_dc(login_client_t *c) {
         pkt->entries[num_ships].menu_id = LE32(0xFFFFFFFF);
         pkt->entries[num_ships].item_id = LE32(0x00000000);
         pkt->entries[num_ships].flags = LE16(0x0000);
-        
-        /* And convert to Shift-JIS */
-        in = strlen(no_ship_msg);
-        out = 0x12;
-        inptr = no_ship_msg;
-        outptr = pkt->entries[num_ships].name;
-        iconv(ic, &inptr, &in, &outptr, &out);
+        strcpy(pkt->entries[num_ships].name, no_ship_msg);
         
         ++num_ships;
         len += 0x1C;
@@ -797,12 +775,9 @@ static int send_ship_list_dc(login_client_t *c) {
     pkt->hdr.flags = (uint8_t)(num_ships - 1);
 
     /* Send the packet away */
-    iconv_close(ic);
-
     return crypt_send(c, len);
 
 out:
-    iconv_close(ic);
     return i;
 }
 
@@ -815,7 +790,7 @@ static int send_ship_list_pc(login_client_t *c) {
     void *result;
     char **row;
     uint32_t ship_id, players;
-    int i, len = 0x30;
+    int i, len = 0x30, gm_only;
     iconv_t ic = iconv_open("UTF-16LE", "SHIFT_JIS");
     size_t in, out;
     char *inptr, *outptr;
@@ -840,7 +815,7 @@ static int send_ship_list_pc(login_client_t *c) {
     num_ships = 1;
 
     /* Get ready to query the database */
-    sprintf(query, "SELECT ship_id, name, players FROM online_ships");
+    sprintf(query, "SELECT ship_id, name, players, gm_only FROM online_ships");
 
     /* Query the database and see what we've got */
     if(sylverant_db_query(&conn, query)) {
@@ -855,31 +830,35 @@ static int send_ship_list_pc(login_client_t *c) {
 
     /* As long as we have some rows, go */
     while((row = sylverant_db_result_fetch(result))) {
-        /* Clear out the ship information */
-        memset(&pkt->entries[num_ships], 0, 0x2C);
+        gm_only = atoi(row[3]);
 
-        /* Grab info from the row */
-        ship_id = (uint32_t)strtoul(row[0], NULL, 0);
-        players = (uint32_t)strtoul(row[2], NULL, 0);
+        if(!gm_only || c->is_gm) {
+            /* Clear out the ship information */
+            memset(&pkt->entries[num_ships], 0, 0x2C);
 
-        /* Fill in what we have */
-        pkt->entries[num_ships].menu_id = LE32(0x00120000);
-        pkt->entries[num_ships].item_id = LE32(ship_id);
-        pkt->entries[num_ships].flags = LE16(0x0000);
+            /* Grab info from the row */
+            ship_id = (uint32_t)strtoul(row[0], NULL, 0);
+            players = (uint32_t)strtoul(row[2], NULL, 0);
 
-        /* Create the name string (ASCII) */
-        sprintf(tmp, "%s (%d)", row[1], players);
+            /* Fill in what we have */
+            pkt->entries[num_ships].menu_id = LE32(0x00120000);
+            pkt->entries[num_ships].item_id = LE32(ship_id);
+            pkt->entries[num_ships].flags = LE16(0x0000);
 
-        /* And convert to UTF16 */
-        in = strlen(tmp);
-        out = 0x22;
-        inptr = tmp;
-        outptr = pkt->entries[num_ships].name;
-        iconv(ic, &inptr, &in, &outptr, &out);
+            /* Create the name string (ASCII) */
+            sprintf(tmp, "%s (%d)", row[1], players);
 
-        /* We're done with this ship, increment the counter */
-        ++num_ships;
-        len += 0x2C;
+            /* And convert to UTF16 */
+            in = strlen(tmp);
+            out = 0x22;
+            inptr = tmp;
+            outptr = (char *)pkt->entries[num_ships].name;
+            iconv(ic, &inptr, &in, &outptr, &out);
+
+            /* We're done with this ship, increment the counter */
+            ++num_ships;
+            len += 0x2C;
+        }
     }
 
     sylverant_db_result_free(result);
@@ -896,7 +875,7 @@ static int send_ship_list_pc(login_client_t *c) {
         in = strlen(no_ship_msg);
         out = 0x22;
         inptr = no_ship_msg;
-        outptr = pkt->entries[num_ships].name;
+        outptr = (char *)pkt->entries[num_ships].name;
         iconv(ic, &inptr, &in, &outptr, &out);
 
         ++num_ships;
@@ -1079,11 +1058,6 @@ static int send_dc_quest_list(login_client_t *c,
     dc_quest_list_pkt *pkt = (dc_quest_list_pkt *)sendbuf;
     int i, len = 0x04, entries = 0;
 
-    /* Verify we got the sendbuf. */
-    if(!sendbuf) {
-        return -1;
-    }
-
     /* Clear out the header */
     memset(pkt, 0, 0x04);
 
@@ -1124,11 +1098,6 @@ static int send_pc_quest_list(login_client_t *c,
     iconv_t ic;
     size_t in, out;
     char *inptr, *outptr;
-
-    /* Verify we got the sendbuf. */
-    if(!sendbuf) {
-        return -1;
-    }
 
     /* Quest names are stored internally as Shift-JIS, convert to UTF-16. */
     ic = iconv_open("UTF-16LE", "SHIFT_JIS");
@@ -1188,11 +1157,6 @@ static int send_gc_quest_list(login_client_t *c,
     dc_quest_list_pkt *pkt = (dc_quest_list_pkt *)sendbuf;
     int i, len = 0x04, entries = 0;
 
-    /* Verify we got the sendbuf. */
-    if(!sendbuf) {
-        return -1;
-    }
-
     /* Clear out the header */
     memset(pkt, 0, 0x04);
 
@@ -1251,11 +1215,6 @@ static int send_dc_quest(login_client_t *c, sylverant_quest_t *q) {
     int bindone = 0, datdone = 0, chunknum = 0;
     char filename[256];
     size_t amt;
-
-    /* Verify we got the sendbuf. */
-    if(!sendbuf) {
-        return -1;
-    }
 
     /* Each quest has two files: a .dat file and a .bin file, send a file packet
        for each of them. */
@@ -1381,11 +1340,6 @@ static int send_pc_quest(login_client_t *c, sylverant_quest_t *q) {
     int bindone = 0, datdone = 0, chunknum = 0;
     char filename[256];
     size_t amt;
-
-    /* Verify we got the sendbuf. */
-    if(!sendbuf) {
-        return -1;
-    }
 
     /* Each quest has two files: a .dat file and a .bin file, send a file packet
        for each of them. */
@@ -1514,11 +1468,6 @@ static int send_gc_quest(login_client_t *c, sylverant_quest_t *q) {
     char filename[256];
     size_t amt;
 
-    /* Verify we got the sendbuf. */
-    if(!sendbuf) {
-        return -1;
-    }
-
     /* Each quest has two files: a .dat file and a .bin file, send a file packet
        for each of them. */
     sprintf(filename, "offline_quests/gc-en/%s.bin", q->prefix);
@@ -1547,11 +1496,11 @@ static int send_gc_quest(login_client_t *c, sylverant_quest_t *q) {
     sprintf(file->name, "%s", q->name);
 
     file->hdr.pkt_type = LOGIN_QUEST_FILE_TYPE;
-    file->hdr.flags = 0x00;
+    file->hdr.flags = 0x03; /* ??? */
     file->hdr.pkt_len = LE16(LOGIN_DC_QUEST_FILE_LENGTH);
     sprintf(file->filename, "%s.dat", q->prefix);
     file->length = LE32(datlen);
-    file->flags = 0x0002;
+    file->flags = 0;
 
     if(crypt_send(c, LOGIN_DC_QUEST_FILE_LENGTH)) {
         return -2;
@@ -1563,11 +1512,11 @@ static int send_gc_quest(login_client_t *c, sylverant_quest_t *q) {
     sprintf(file->name, "%s", q->name);
 
     file->hdr.pkt_type = LOGIN_QUEST_FILE_TYPE;
-    file->hdr.flags = 0x00;
+    file->hdr.flags = 0x03; /* ??? */
     file->hdr.pkt_len = LE16(LOGIN_DC_QUEST_FILE_LENGTH);
     sprintf(file->filename, "%s.bin", q->prefix);
     file->length = LE32(binlen);
-    file->flags = 0x0002;
+    file->flags = 0;
 
     if(crypt_send(c, LOGIN_DC_QUEST_FILE_LENGTH)) {
         return -2;

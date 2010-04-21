@@ -15,16 +15,16 @@ dnl
 dnl You should have received a copy of the GNU General Public License
 dnl along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-AC_PREREQ([2.62])
-AC_INIT([login_server], [0.1.0])
+AC_PREREQ(2.61)
+AC_INIT([login_server],[0.1.0])
 AC_CONFIG_MACRO_DIR([m4])
 
 AC_CANONICAL_HOST
 AC_CANONICAL_TARGET
 
-AM_INIT_AUTOMAKE([login_server], [0.1.0])
+AM_INIT_AUTOMAKE
 AC_PROG_INSTALL
-AC_PROG_LIBTOOL
+LT_INIT
 
 AC_LANG(C)
 
@@ -35,14 +35,13 @@ AC_PROG_CC
 
 # Checks for libraries.
 MYSQL_CLIENT()
-AC_CHECK_LIB([expat], [XML_ParserCreate], , AC_MSG_ERROR([libexpat is required!]))
-AC_CHECK_LIB([sylverant], [sylverant_read_config], , AC_MSG_ERROR([libsylverant is required!]))
 
 MYSQL_LIBS="`mysql_config --libs`"
 AC_SUBST(MYSQL_LIBS)
+AC_CHECK_LIB([expat], [XML_ParserCreate], , AC_MSG_ERROR([libexpat is required!]))
+AC_CHECK_LIB([sylverant], [sylverant_read_config], , AC_MSG_ERROR([libsylverant is required!]))
 
 AM_ICONV
-AM_ICONV_LINK
 
 # Checks for header files.
 AC_CHECK_HEADERS([arpa/inet.h inttypes.h netdb.h netinet/in.h stdlib.h string.h sys/socket.h sys/time.h unistd.h])
@@ -60,6 +59,8 @@ AC_C_BIGENDIAN
 AC_FUNC_MALLOC
 AC_FUNC_REALLOC
 AC_CHECK_FUNCS([gethostname gettimeofday inet_ntoa memmove memset select socket strtoul])
+
+ADD_CFLAGS([-Wall])
 
 AC_CONFIG_FILES([Makefile])
 

@@ -43,7 +43,7 @@
 #include "login.h"
 #include "login_packets.h"
 
-#define VERSION "0.1.0"
+#define NUM_GCSOCKS 4
 
 /* Stuff read from the config files */
 sylverant_dbconn_t conn;
@@ -56,7 +56,7 @@ in_addr_t netmask;
 /* Print information about this program to stdout. */
 static void print_program_info() {
     printf("Sylverant Login Server version %s\n", VERSION);
-    printf("Copyright (C) 2009 Lawrence Sebald\n\n");
+    printf("Copyright (C) 2009, 2010 Lawrence Sebald\n\n");
     printf("This program is free software: you can redistribute it and/or\n"
            "modify it under the terms of the GNU General Public License\n"
            "version 3 as published by the Free Software Foundation.\n\n"
@@ -247,13 +247,12 @@ static int get_ip_info() {
     return 0;
 }
 
-static void run_server(int dcsock, int pcsock, int gcsock) {
+static void run_server(int dcsock, int pcsock, int gcsocks[NUM_GCSOCKS]) {
     fd_set readfds, writefds;
     struct timeval timeout;
-    int nfds;
     socklen_t len;
     struct sockaddr_in addr;
-    int asock;
+    int nfds, asock, j;
     login_client_t *i, *tmp;
     ssize_t sent;
 
@@ -263,6 +262,7 @@ static void run_server(int dcsock, int pcsock, int gcsock) {
         FD_ZERO(&writefds);
         timeout.tv_sec = 9001;
         timeout.tv_usec = 0;
+        nfds = 0;
 
         /* Fill the sockets into the fd_set so we can use select below. */
         TAILQ_FOREACH(i, &clients, qentry) {
@@ -281,8 +281,11 @@ static void run_server(int dcsock, int pcsock, int gcsock) {
         nfds = nfds > dcsock ? nfds : dcsock;
         FD_SET(pcsock, &readfds);
         nfds = nfds > pcsock ? nfds : pcsock;
-        FD_SET(gcsock, &readfds);
-        nfds = nfds > pcsock ? nfds : gcsock;
+
+        for(j = 0; j < NUM_GCSOCKS; ++j) {
+            FD_SET(gcsocks[j], &readfds);
+            nfds = nfds > gcsocks[j] ? nfds : gcsocks[j];
+        }
 
         if(select(nfds + 1, &readfds, &writefds, NULL, &timeout) > 0) {
             /* See if we have an incoming client. */
@@ -320,20 +323,22 @@ static void run_server(int dcsock, int pcsock, int gcsock) {
                 }
             }
 
-            if(FD_ISSET(gcsock, &readfds)) {
-                len = sizeof(struct sockaddr_in);
+            for(j = 0; j < NUM_GCSOCKS; ++j) {
+                if(FD_ISSET(gcsocks[j], &readfds)) {
+                    len = sizeof(struct sockaddr_in);
 
-                if((asock = accept(gcsock, (struct sockaddr *)&addr,
-                                   &len)) < 0) {
-                    perror("accept");
-                }
+                    if((asock = accept(gcsocks[j], (struct sockaddr *)&addr,
+                                       &len)) < 0) {
+                        perror("accept");
+                    }
 
-                debug(DBG_LOG, "Accepted Gamecube connection from %s\n",
-                      inet_ntoa(addr.sin_addr));
+                    debug(DBG_LOG, "Accepted Gamecube connection from %s\n",
+                          inet_ntoa(addr.sin_addr));
 
-                if(create_connection(asock, addr.sin_addr.s_addr,
-                                     CLIENT_TYPE_GC) == NULL) {
-                    close(asock);
+                    if(create_connection(asock, addr.sin_addr.s_addr,
+                                         CLIENT_TYPE_GC) == NULL) {
+                        close(asock);
+                    }
                 }
             }
 
@@ -428,7 +433,8 @@ static int open_sock(uint16_t port) {
 }
 
 int main(int argc, char *argv[]) {
-    int dcsock, pcsock, gcsock;
+    int dcsock, pcsock, i;
+    int gcsocks[NUM_GCSOCKS];
 
     chdir(SYLVERANT_DIRECTORY);
 
@@ -452,20 +458,45 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    debug(DBG_LOG, "Opening GC port (9100) for connections.\n");
-    gcsock = open_sock(9100);
+    debug(DBG_LOG, "Opening US GC port (9100) for connections.\n");
+    gcsocks[0] = open_sock(9100);
 
-    if(gcsock < 0) {
+    if(gcsocks[0] < 0) {
+        exit(EXIT_FAILURE);
+    }
+
+    debug(DBG_LOG, "Opening EU GC (50hz) port (9201) for connections.\n");
+    gcsocks[1] = open_sock(9201);
+
+    if(gcsocks[1] < 0) {
+        exit(EXIT_FAILURE);
+    }
+
+    debug(DBG_LOG, "Opening JP GC (1.0) port (9000) for connections.\n");
+    gcsocks[2] = open_sock(9000);
+
+    if(gcsocks[2] < 0) {
+        exit(EXIT_FAILURE);
+    }
+
+    debug(DBG_LOG, "Opening JP GC (1.1) port (9001) for connections.\n");
+    gcsocks[3] = open_sock(9001);
+
+    if(gcsocks[3] < 0) {
         exit(EXIT_FAILURE);
     }
 
     /* Run the login server. */
-    run_server(dcsock, pcsock, gcsock);
+    run_server(dcsock, pcsock, gcsocks);
 
     /* Clean up. */
     close(dcsock);
     close(pcsock);
-    close(gcsock);
+
+    for(i = 0; i < NUM_GCSOCKS; ++i) {
+        close(gcsocks[i]);
+    }
+
     sylverant_db_close(&conn);
     sylverant_quests_destroy(&qlist);
 
