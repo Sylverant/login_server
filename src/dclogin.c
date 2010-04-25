@@ -380,9 +380,8 @@ static int handle_gchlcheck(login_client_t *c, login_gc_hlcheck_pkt *pkt) {
     char query[256], serial[32], access[32];
     void *result;
     char **row;
-    unsigned char hash[16];
     time_t banlen;
-    int i, banned = is_ip_banned(c->ip_addr, &banlen, query);
+    int banned = is_ip_banned(c->ip_addr, &banlen, query);
 
     /* Make sure the user isn't IP banned. */
     if(banned == -1) {

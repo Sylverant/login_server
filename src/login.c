@@ -19,6 +19,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/socket.h>
 
 #include <sylverant/debug.h>
 #include <sylverant/encryption.h>
@@ -53,8 +54,8 @@ login_client_t *create_connection(int sock, in_addr_t ip, int type) {
         case CLIENT_TYPE_DC:
         case CLIENT_TYPE_PC:
             /* Generate the encryption keys for the client and server. */
-            client_seed_dc = genrand_int32();
-            server_seed_dc = genrand_int32();
+            rv->client_key = client_seed_dc = genrand_int32();
+            rv->server_key = server_seed_dc = genrand_int32();
 
             CRYPT_CreateKeys(&rv->server_cipher, &server_seed_dc, CRYPT_PC);
             CRYPT_CreateKeys(&rv->client_cipher, &client_seed_dc, CRYPT_PC);
@@ -71,8 +72,8 @@ login_client_t *create_connection(int sock, in_addr_t ip, int type) {
 
         case CLIENT_TYPE_GC:
             /* Generate the encryption keys for the client and server. */
-            client_seed_dc = genrand_int32();
-            server_seed_dc = genrand_int32();
+            rv->client_key = client_seed_dc = genrand_int32();
+            rv->server_key = server_seed_dc = genrand_int32();
 
             CRYPT_CreateKeys(&rv->server_cipher, &server_seed_dc,
                              CRYPT_GAMECUBE);
@@ -146,6 +147,33 @@ int read_from_client(login_client_t *c) {
     sz += c->recvbuf_cur;
     c->recvbuf_cur = 0;
     rbp = recvbuf;
+
+    /* Make sure the client is actually a DC client, since it could be a PSOGC
+       client using the EU version @ 60Hz. */
+    if(c->type == CLIENT_TYPE_DC && !c->got_first && sz >= 4) {
+        memcpy(&c->pkt, rbp, 4);
+        CRYPT_CryptData(&c->client_cipher, &c->pkt, 4, 0);
+
+        /* Check if its one of the two packets we're expecting (0x90 for v1,
+           0x9A for v2). Hopefully there's no way to get these particular
+           combinations with the GC encryption... */
+        if(c->pkt.dc.pkt_type == 0x90 && c->pkt.dc.flags == 0 &&
+           LE16(c->pkt.dc.pkt_len) == 0x0028) {
+            c->got_first = 1;
+        }
+        else if(c->pkt.dc.pkt_type == 0x9A && c->pkt.dc.flags == 0 &&
+                LE16(c->pkt.dc.pkt_len) == 0x00E0) {
+            c->got_first = 1;
+        }
+        /* If we end up in here, its pretty much gotta be a Gamecube client, or
+           someone messing with us. */
+        else {
+            c->type = CLIENT_TYPE_GC;
+            CRYPT_CreateKeys(&c->client_cipher, &c->client_key, CRYPT_GAMECUBE);
+            CRYPT_CreateKeys(&c->server_cipher, &c->server_key, CRYPT_GAMECUBE);
+            memset(&c->pkt, 0, 4);
+        }
+    }
 
     /* As long as what we have is long enough, decrypt it. */
     if(sz >= c->hdr_size) {

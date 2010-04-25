@@ -496,6 +496,7 @@ typedef struct dc_quest_chunk {
 #define LOGIN_QUEST_FILE_TYPE               0x00A6
 #define LOGIN_QUEST_CHUNK_TYPE              0x00A7
 #define LOGIN_TIMESTAMP_TYPE                0x00B1
+#define LOGIN_GC_BOX_CLOSED_TYPE            0x00D6
 #define LOGIN_GC_VERIFY_LICENSE_TYPE        0x00DB
 #define LOGIN_GUILD_CARDS_TYPE              0x00DC
 #define LOGIN_OPTION_REQUEST_TYPE           0x00E0

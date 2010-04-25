@@ -75,6 +75,10 @@ typedef struct login_client {
     int language_code;
     int is_gm;
 
+    uint32_t client_key;
+    uint32_t server_key;
+    int got_first;
+
     CRYPT_SETUP client_cipher;
     CRYPT_SETUP server_cipher;
     
