@@ -31,7 +31,7 @@
 #include "login.h"
 #include "login_packets.h"
 
-extern sylverant_quest_list_t qlist;
+extern sylverant_quest_list_t qlist[CLIENT_TYPE_COUNT][CLIENT_LANG_COUNT];
 
 /* Check if an IP has been IP banned from the server. */
 static int is_ip_banned(in_addr_t ip, time_t *until, char *reason) {
@@ -160,6 +160,8 @@ static int handle_login0(login_client_t *c, login_login0_pkt *pkt) {
 
     sylverant_db_result_free(result);
 
+    c->version = SYLVERANT_QUEST_V1;
+
     return send_simple(c, LOGIN_DC_LOGIN0_TYPE, resp);
 }
 
@@ -277,6 +279,8 @@ static int handle_logina(login_client_t *c, login_dcv2login_pkt *pkt) {
         send_ban_msg(c, banlen, query);
         return -1;
     }
+
+    c->version = SYLVERANT_QUEST_V1 | SYLVERANT_QUEST_V2;
 
     /* Escape all the important strings. */
     sylverant_db_escape_str(&conn, dc_id, pkt->dc_id, 8);
@@ -594,19 +598,20 @@ static int handle_logind(login_client_t *c, login_login_de_pkt *pkt) {
 static int handle_ship_select(login_client_t *c,
                               dc_login_ship_select_pkt *pkt) {
     extern int ship_transfer(login_client_t *c, uint32_t shipid);
+    sylverant_quest_list_t *l = &qlist[c->type][c->language_code];
 
     /* Were we on a ship select or the offline quest menu? */
     if(LE32(pkt->menu_id) == 0x00120000) {
         /* Check if they picked the "Offline Quests" entry. */
-        if(LE32(pkt->item_id) == 0xDEADBEEF && qlist.cat_count == 1) {
-            return send_quest_list(c, &qlist.cats[0]);
+        if(LE32(pkt->item_id) == 0xDEADBEEF && l->cat_count == 1) {
+            return send_quest_list(c, &l->cats[0]);
         }
         else {
             return ship_transfer(c, LE32(pkt->item_id));
         }
     }
     else {
-        return send_quest(c, &qlist.cats[0].quests[LE32(pkt->item_id)]);
+        return send_quest(c, &l->cats[0].quests[LE32(pkt->item_id)]);
     }
 }
 
@@ -658,7 +663,7 @@ int process_dclogin_packet(login_client_t *c, void *pkt) {
 
         case LOGIN_INFO_REQUEST_TYPE:
             /* XXXX: Actually send something relevant! */
-            return send_info_reply(c, "Nothing here.");
+            return send_info_reply(c, "\tENothing here.");
 
         case LOGIN_SHIP_SELECT_TYPE:
             /* XXXX: This might actually work, at least if there's a ship. */

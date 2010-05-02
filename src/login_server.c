@@ -48,7 +48,8 @@
 /* Stuff read from the config files */
 sylverant_dbconn_t conn;
 sylverant_config_t cfg;
-sylverant_quest_list_t qlist;
+
+sylverant_quest_list_t qlist[CLIENT_TYPE_COUNT][CLIENT_LANG_COUNT];
 
 in_addr_t local_addr;
 in_addr_t netmask;
@@ -112,16 +113,28 @@ static void parse_command_line(int argc, char *argv[]) {
     }
 }
 
-/* Load the configuration file and print out parameters with DBG_LOG. */
+/* Load the configuration file. */
 static void load_config() {
+    char fn[512];
+    int i, j;
+
     if(sylverant_read_config(&cfg)) {
         debug(DBG_ERROR, "Cannot load configuration!\n");
         exit(1);
     }
 
-    if(cfg.quests_file[0] && sylverant_quests_read(cfg.quests_file, &qlist)) {
-        debug(DBG_ERROR, "Cannot load offline quests list!\n");
-        exit(1);
+    /* Attempt to read each quests file... */
+    if(cfg.quests_dir[0]) {
+        for(i = 0; i < CLIENT_TYPE_COUNT; ++i) {
+            for(j = 0; j < CLIENT_LANG_COUNT; ++j) {
+                sprintf(fn, "%s/%s-%s/quests.xml", cfg.quests_dir,
+                        type_codes[i], language_codes[j]);
+                if(!sylverant_quests_read(fn, &qlist[i][j])) {
+                    debug(DBG_LOG, "Read quests for %s-%s\n", type_codes[i],
+                          language_codes[j]);
+                }
+            }
+        }
     }
 
     debug(DBG_LOG, "Connecting to the database...\n");
@@ -178,14 +191,9 @@ int ship_transfer(login_client_t *c, uint32_t shipid) {
     /* They should be on different networks if we get here,
        send the external IP. */
 
-    /* If the client is on the PC version, connect to the PC version port,
+    /* If the client is on the PC/GC version, connect to the PC/GC version port,
        rather than the one for the DC version. */
-    if(c->type == CLIENT_TYPE_PC) {
-        ++port;
-    }
-    else if(c->type == CLIENT_TYPE_GC) {
-        port += 2;
-    }
+    port += c->type;
 
     return send_redirect(c, ip, port);
 }
@@ -433,7 +441,7 @@ static int open_sock(uint16_t port) {
 }
 
 int main(int argc, char *argv[]) {
-    int dcsock, pcsock, i;
+    int dcsock, pcsock, i, j;
     int gcsocks[NUM_GCSOCKS];
 
     chdir(SYLVERANT_DIRECTORY);
@@ -444,7 +452,8 @@ int main(int argc, char *argv[]) {
 
     get_ip_info();
 
-    debug(DBG_LOG, "Opening Dreamcast port (9200) for connections.\n");
+    debug(DBG_LOG, "Opening Dreamcast/EU GC (60hz) port (9200) for "
+          "connections.\n");
     dcsock = open_sock(9200);
 
     if(dcsock < 0) {
@@ -498,7 +507,12 @@ int main(int argc, char *argv[]) {
     }
 
     sylverant_db_close(&conn);
-    sylverant_quests_destroy(&qlist);
+
+    for(i = 0; i < CLIENT_TYPE_COUNT; ++i) {
+        for(j = 0; j < CLIENT_LANG_COUNT; ++j) {
+            sylverant_quests_destroy(&qlist[i][j]);
+        }
+    }
 
     return 0;
 }

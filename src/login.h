@@ -78,6 +78,7 @@ typedef struct login_client {
     uint32_t client_key;
     uint32_t server_key;
     int got_first;
+    int version;
 
     CRYPT_SETUP client_cipher;
     CRYPT_SETUP server_cipher;
@@ -101,10 +102,34 @@ typedef struct login_client {
 #define CLIENT_TYPE_PC              1
 #define CLIENT_TYPE_GC              2
 
+#define CLIENT_TYPE_COUNT           3
+
+/* The list of type codes for the quest directories. */
+static const char type_codes[][3] __attribute__((unused)) = {
+    "dc", "pc", "gc"
+};
+
 /* These are not supported at the moment, but here to make it so that the code
    that was written for them still works. */
 #define CLIENT_TYPE_BB_LOGIN        0xFE
 #define CLIENT_TYPE_BB_CHARACTER    0xFF
+
+/* Language codes. */
+#define CLIENT_LANG_JAPANESE        0
+#define CLIENT_LANG_ENGLISH         1
+#define CLIENT_LANG_GERMAN          2
+#define CLIENT_LANG_FRENCH          3
+#define CLIENT_LANG_SPANISH         4
+#define CLIENT_LANG_CHINESE_SIMP    5
+#define CLIENT_LANG_CHINESE_TRAD    6
+#define CLIENT_LANG_KOREAN          7
+
+#define CLIENT_LANG_COUNT           8
+
+/* The list of language codes for the quest directories. */
+static const char language_codes[][3] __attribute__((unused)) = {
+    "jp", "en", "de", "fr", "sp", "cs", "ct", "kr"
+};
 
 TAILQ_HEAD(client_queue, login_client);
 extern struct client_queue clients;

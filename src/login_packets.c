@@ -33,6 +33,7 @@
 
 extern sylverant_dbconn_t conn;
 extern sylverant_config_t cfg;
+extern sylverant_quest_list_t qlist[CLIENT_TYPE_COUNT][CLIENT_LANG_COUNT];
 
 uint8_t sendbuf[65536];
 
@@ -676,7 +677,7 @@ static int send_ship_list_bb(login_client_t *c) {
 static int send_ship_list_dc(login_client_t *c) {
     dc_login_ship_list_pkt *pkt = (dc_login_ship_list_pkt *)sendbuf;
     char no_ship_msg[] = "No Ships";
-    char query[256], tmp[18];
+    char query[256];
     uint32_t num_ships = 0;
     void *result;
     char **row;
@@ -740,7 +741,7 @@ static int send_ship_list_dc(login_client_t *c) {
 
     sylverant_db_result_free(result);
 
-    if(cfg.quests_file[0]) {
+    if(qlist[c->type][c->language_code].cats) {
         /* Add the entry for Offline Quests. */
         memset(&pkt->entries[num_ships], 0, 0x1C);
     
@@ -863,6 +864,24 @@ static int send_ship_list_pc(login_client_t *c) {
 
     sylverant_db_result_free(result);
 
+    if(qlist[c->type][c->language_code].cats) {
+        /* Add the entry for Offline Quests. */
+        memset(&pkt->entries[num_ships], 0, 0x2C);
+
+        /* Fill in what we have */
+        pkt->entries[num_ships].menu_id = LE32(0x00120000);
+        pkt->entries[num_ships].item_id = LE32(0xDEADBEEF);
+        pkt->entries[num_ships].flags = LE16(0x0000);
+
+        /* Create the name string */
+        memcpy(pkt->entries[num_ships].name,
+               "O\0f\0f\0l\0i\0n\0e\0 \0Q\0u\0e\0s\0t\0s\0", 28);
+
+        /* We're done with this "ship", increment the counter */
+        ++num_ships;
+        len += 0x2C;
+    }
+
     /* Make sure we have at least one ship... */
     if(num_ships == 1) {
         /* Clear out the ship information */
@@ -983,7 +1002,7 @@ static int send_info_reply_dc(login_client_t *c, char msg[]) {
     }
 
     /* Fill in the header */
-    if(c->type == CLIENT_TYPE_DC) {
+    if(c->type == CLIENT_TYPE_DC || c->type == CLIENT_TYPE_GC) {
         pkt->hdr.dc.pkt_type = LOGIN_INFO_REPLY_TYPE;
         pkt->hdr.dc.flags = 0;
         pkt->hdr.dc.pkt_len = LE16(out);
@@ -1218,10 +1237,12 @@ static int send_dc_quest(login_client_t *c, sylverant_quest_t *q) {
 
     /* Each quest has two files: a .dat file and a .bin file, send a file packet
        for each of them. */
-    sprintf(filename, "offline_quests/dc-en/%s.bin", q->prefix);
+    sprintf(filename, "%s/dc-%s/%s.bin", cfg.quests_dir,
+            language_codes[c->language_code], q->prefix);
     bin = fopen(filename, "rb");
 
-    sprintf(filename, "offline_quests/dc-en/%s.dat", q->prefix);
+    sprintf(filename, "%s/dc-%s/%s.dat", cfg.quests_dir,
+            language_codes[c->language_code], q->prefix);
     dat = fopen(filename, "rb");
 
     if(!bin || !dat) {
@@ -1343,10 +1364,12 @@ static int send_pc_quest(login_client_t *c, sylverant_quest_t *q) {
 
     /* Each quest has two files: a .dat file and a .bin file, send a file packet
        for each of them. */
-    sprintf(filename, "offline_quests/pc-en/%s.bin", q->prefix);
+    sprintf(filename, "%s/pc-%s/%s.bin", cfg.quests_dir,
+            language_codes[c->language_code], q->prefix);
     bin = fopen(filename, "rb");
 
-    sprintf(filename, "offline_quests/pc-en/%s.dat", q->prefix);
+    sprintf(filename, "%s/pc-%s/%s.dat", cfg.quests_dir,
+            language_codes[c->language_code], q->prefix);
     dat = fopen(filename, "rb");
 
     if(!bin || !dat) {
@@ -1470,10 +1493,12 @@ static int send_gc_quest(login_client_t *c, sylverant_quest_t *q) {
 
     /* Each quest has two files: a .dat file and a .bin file, send a file packet
        for each of them. */
-    sprintf(filename, "offline_quests/gc-en/%s.bin", q->prefix);
+    sprintf(filename, "%s/gc-%s/%s.bin", cfg.quests_dir,
+            language_codes[c->language_code], q->prefix);
     bin = fopen(filename, "rb");
 
-    sprintf(filename, "offline_quests/gc-en/%s.dat", q->prefix);
+    sprintf(filename, "%s/gc-%s/%s.dat", cfg.quests_dir,
+            language_codes[c->language_code], q->prefix);
     dat = fopen(filename, "rb");
 
     if(!bin || !dat) {
