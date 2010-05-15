@@ -317,7 +317,7 @@ typedef struct bb_login_ship_list {
 
 /* The ship list packet send to tell clients what ships are up (Dreamcast). */
 typedef struct dc_login_ship_list {
-    dc_pkt_header_t hdr;    /* The flags field says how entries are below */
+    dc_pkt_header_t hdr;    /* The flags field says number of entries below */
     struct {
         uint32_t menu_id;
         uint32_t item_id;
@@ -328,7 +328,7 @@ typedef struct dc_login_ship_list {
 
 /* The ship list packet send to tell clients what ships are up (PC). */
 typedef struct pc_login_ship_list {
-    pc_pkt_header_t hdr;    /* The flags field says how entries are below */
+    pc_pkt_header_t hdr;    /* The flags field says number of entries below */
     struct {
         uint32_t menu_id;
         uint32_t item_id;
@@ -590,7 +590,7 @@ int send_bb_welcome(login_client_t *c, uint8_t svect[48], uint8_t cvect[48]);
 int send_dc_welcome(login_client_t *c, uint32_t svect, uint32_t cvect);
 
 /* Send a large message packet to the given client. */
-int send_large_msg(login_client_t *c, char msg[]);
+int send_large_msg(login_client_t *c, const char msg[]);
 
 /* Send the Dreamcast security packet to the given client. */
 int send_dc_security(login_client_t *c, uint32_t gc, uint8_t *data,
@@ -631,10 +631,6 @@ int send_info_reply(login_client_t *c, char msg[]);
 
 /* Send a simple (header-only) packet to the client. */
 int send_simple(login_client_t *c, int type, int flags);
-
-/* Send the packet to clients that will help sort out PSOGC versus PSOPC
-   users. */
-int send_selective_redirect(login_client_t *c, in_addr_t ip, uint16_t port);
 
 /* Send the quest list to a client. */
 int send_quest_list(login_client_t *c, sylverant_quest_category_t *l);

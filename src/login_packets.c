@@ -153,7 +153,7 @@ int send_dc_welcome(login_client_t *c, uint32_t svect, uint32_t cvect) {
 }
 
 /* Send a large message packet to the given client. */
-static int send_large_msg_bb(login_client_t *c, char msg[]) {
+static int send_large_msg_bb(login_client_t *c, const char msg[]) {
     bb_login_large_msg_pkt *pkt = (bb_login_large_msg_pkt *)sendbuf;
     int slen = strlen(msg), i;
     uint16_t len = 0x08 + (slen << 1);
@@ -183,45 +183,38 @@ static int send_large_msg_bb(login_client_t *c, char msg[]) {
     return crypt_send(c, len);
 }
 
-static int send_large_msg_dc(login_client_t *c, char msg[]) {
-    dc_login_large_msg_pkt *pkt = (dc_login_large_msg_pkt *)sendbuf;
-    int size = 5 + strlen(msg);
-
-    /* Copy the message */
-    strcpy((char *)pkt->message, msg);
-
-    /* Pad to a length divisible by 4 */
-    while(size & 0x03) {
-        sendbuf[size++] = 0;
-    }
-
-    /* Fill in the header */
-    pkt->hdr.dc.pkt_type = LOGIN_LARGE_MESSAGE_TYPE;
-    pkt->hdr.dc.pkt_len = LE16(size);
-
-    /* Send the packet away */
-    return crypt_send(c, 5 + strlen(msg));
-}
-
-static int send_large_msg_pc(login_client_t *c, char msg[]) {
+static int send_large_msg_dc(login_client_t *c, const char msg[]) {
     dc_login_large_msg_pkt *pkt = (dc_login_large_msg_pkt *)sendbuf;
     int size = 4;
-    iconv_t ic = iconv_open("UTF-16LE", "SHIFT_JIS");
+    iconv_t ic;
     size_t in, out;
     ICONV_CONST char *inptr;
     char *outptr;
+
+    if(c->type == CLIENT_TYPE_DC || c->type == CLIENT_TYPE_GC) {
+        if(msg[1] == 'J') {
+            ic = iconv_open("SHIFT_JIS", "UTF-8");
+        }
+        else {
+            ic = iconv_open("ISO-8859-1", "UTF-8");
+        }
+    }
+    else {
+        ic = iconv_open("UTF-16LE", "UTF-8");
+    }
 
     if(ic == (iconv_t)-1) {
         perror("iconv_open");
         return -1;
     }
 
-    /* Convert to UTF-16 */
+    /* Convert to the proper encoding */
     in = strlen(msg) + 1;
     out = 65524;
     inptr = msg;
     outptr = (char *)pkt->message;
     iconv(ic, &inptr, &in, &outptr, &out);
+    iconv_close(ic);
 
     /* Figure out how long the packet is */
     size += 65524 - out;
@@ -232,15 +225,22 @@ static int send_large_msg_pc(login_client_t *c, char msg[]) {
     }
 
     /* Fill in the header */
-    pkt->hdr.pc.pkt_type = LOGIN_LARGE_MESSAGE_TYPE;
-    pkt->hdr.pc.flags = 0;
-    pkt->hdr.pc.pkt_len = LE16(size);
+    if(c->type == CLIENT_TYPE_DC || c->type == CLIENT_TYPE_GC) {
+        pkt->hdr.dc.pkt_type = LOGIN_LARGE_MESSAGE_TYPE;
+        pkt->hdr.dc.flags = 0;
+        pkt->hdr.dc.pkt_len = LE16(size);
+    }
+    else {
+        pkt->hdr.pc.pkt_type = LOGIN_LARGE_MESSAGE_TYPE;
+        pkt->hdr.pc.flags = 0;
+        pkt->hdr.pc.pkt_len = LE16(size);
+    }
 
     /* Send the packet away */
     return crypt_send(c, size);
 }
 
-int send_large_msg(login_client_t *c, char msg[]) {
+int send_large_msg(login_client_t *c, const char msg[]) {
     /* Call the appropriate function. */
     switch(c->type) {
         case CLIENT_TYPE_BB_LOGIN:
@@ -249,10 +249,8 @@ int send_large_msg(login_client_t *c, char msg[]) {
 
         case CLIENT_TYPE_DC:
         case CLIENT_TYPE_GC:
-            return send_large_msg_dc(c, msg);
-
         case CLIENT_TYPE_PC:
-            return send_large_msg_pc(c, msg);
+            return send_large_msg_dc(c, msg);
     }
 
     return -1;
@@ -346,26 +344,6 @@ int send_redirect(login_client_t *c, in_addr_t ip, uint16_t port) {
     }
 
     return -1;
-}
-
-/* Send the packet to clients that will help sort out PSOGC versus PSOPC
-   users. */
-int send_selective_redirect(login_client_t *c, in_addr_t ip, uint16_t port) {
-    dc_login_redirect_pkt *pkt = (dc_login_redirect_pkt *)sendbuf;
-
-    /* Wipe the packet */
-    memset(pkt, 0, 0xB0);
-
-    /* Fill in the header */
-    pkt->hdr.dc.pkt_type = LOGIN_REDIRECT_TYPE;
-    pkt->hdr.dc.pkt_len = LE16(0xB0);
-
-    /* Fill in the IP and port */
-    pkt->ip_addr = ip;
-    pkt->port = LE16(port);
-
-    /* Send the packet away */
-    return send_raw(c, 0xB0);
 }
 
 /* Send a timestamp packet to the given client. */
@@ -793,7 +771,7 @@ static int send_ship_list_pc(login_client_t *c) {
     char **row;
     uint32_t ship_id, players;
     int i, len = 0x30, gm_only;
-    iconv_t ic = iconv_open("UTF-16LE", "SHIFT_JIS");
+    iconv_t ic = iconv_open("UTF-16LE", "UTF-8");
     size_t in, out;
     ICONV_CONST char *inptr;
     char *outptr;
@@ -848,10 +826,10 @@ static int send_ship_list_pc(login_client_t *c) {
             pkt->entries[num_ships].item_id = LE32(ship_id);
             pkt->entries[num_ships].flags = LE16(0x0000);
 
-            /* Create the name string (ASCII) */
+            /* Create the name string (UTF-8) */
             sprintf(tmp, "%s (%d)", row[1], players);
 
-            /* And convert to UTF16 */
+            /* And convert to UTF-16 */
             in = strlen(tmp);
             out = 0x22;
             inptr = tmp;
@@ -907,9 +885,9 @@ static int send_ship_list_pc(login_client_t *c) {
     pkt->hdr.pkt_len = LE16(len);
     pkt->hdr.flags = (uint8_t)(num_ships - 1);
 
-    /* Send the packet away */
     iconv_close(ic);
 
+    /* Send the packet away */
     return crypt_send(c, len);
 
 out:
@@ -973,10 +951,15 @@ static int send_info_reply_dc(login_client_t *c, char msg[]) {
     char *outptr;
 
     if(c->type == CLIENT_TYPE_DC || c->type == CLIENT_TYPE_GC) {
-        ic = iconv_open("SHIFT_JIS", "SHIFT_JIS");
+        if(msg[1] == 'J') {
+            ic = iconv_open("SHIFT_JIS", "UTF-8");
+        }
+        else {
+            ic = iconv_open("ISO-8859-1", "UTF-8");
+        }
     }
     else {
-        ic = iconv_open("UTF-16LE", "SHIFT_JIS");
+        ic = iconv_open("UTF-16LE", "UTF-8");
     }
 
     if(ic == (iconv_t)-1) {
@@ -1133,6 +1116,8 @@ static int send_dc_quest_list(login_client_t *c,
         len += 0x98;
     }
 
+    iconv_close(ic);
+
     /* Fill in the rest of the header */
     pkt->hdr.flags = entries;
     pkt->hdr.pkt_len = LE16(len);
@@ -1253,6 +1238,8 @@ static int send_gc_quest_list(login_client_t *c,
         len += 0x98;
     }
 
+    iconv_close(ic);
+
     /* Fill in the rest of the header */
     pkt->hdr.flags = entries;
     pkt->hdr.pkt_len = LE16(len);
@@ -1306,6 +1293,7 @@ int send_quest(login_client_t *c, sylverant_quest_t *q) {
 
         /* If we can't read from the file, bail. */
         if(!read) {
+            fclose(fp);
             return -2;
         }
 

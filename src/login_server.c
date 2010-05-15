@@ -452,6 +452,9 @@ int main(int argc, char *argv[]) {
 
     get_ip_info();
 
+	/* Init mini18n if we have it. */
+	init_i18n();
+
     debug(DBG_LOG, "Opening Dreamcast/EU GC (60hz) port (9200) for "
           "connections.\n");
     dcsock = open_sock(9200);
@@ -513,6 +516,8 @@ int main(int argc, char *argv[]) {
             sylverant_quests_destroy(&qlist[i][j]);
         }
     }
+
+	cleanup_i18n();
 
     return 0;
 }

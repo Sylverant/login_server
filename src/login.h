@@ -148,4 +148,8 @@ int read_from_client(login_client_t *c);
 
 void disconnect_from_ships(uint32_t gcn);
 
+/* In dclogin.c */
+void init_i18n(void);
+void cleanup_i18n(void);
+
 #endif /* !LOGIN_H */

@@ -27,3 +27,4 @@ login_server_SOURCES = src/dclogin.c src/login.c src/login.h \
 datarootdir = @datarootdir@
 
 EXTRA_DIST = config.rpath
+SUBDIRS = l10n

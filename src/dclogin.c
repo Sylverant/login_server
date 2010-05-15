@@ -31,6 +31,14 @@
 #include "login.h"
 #include "login_packets.h"
 
+#ifdef HAVE_LIBMINI18N
+#include <mini18n-multi.h>
+#define __(c, s) mini18n_get(langs[c->language_code], s)
+static mini18n_t langs[CLIENT_LANG_COUNT];
+#else
+#define __(c, s) s
+#endif
+
 extern sylverant_quest_list_t qlist[CLIENT_TYPE_COUNT][CLIENT_LANG_COUNT];
 
 /* Check if an IP has been IP banned from the server. */
@@ -101,11 +109,11 @@ static int send_ban_msg(login_client_t *c, time_t until, const char *reason) {
     struct tm cooked;
 
     /* Create the ban string. */
-    sprintf(string, "\tEYou have been banned from this server.\n"
-            "Reason:\n%s\n\nYour ban expires:\n", reason);
+    sprintf(string, __(c, "\tEYou have been banned from this server.\n"
+            "Reason:\n%s\n\nYour ban expires:\n"), reason);
 
     if((uint32_t)until == 0xFFFFFFFF) {
-        strcat(string, "Never");
+        strcat(string, __(c, "Never"));
     }
     else {
         gmtime_r(&until, &cooked);
@@ -128,8 +136,8 @@ static int handle_login0(login_client_t *c, login_login0_pkt *pkt) {
 
     /* Make sure the user isn't IP banned. */
     if(banned == -1) {
-        send_large_msg(c, "\tEInternal Server Error.\n"
-                       "Please try again later.");
+        send_large_msg(c, __(c, "\tEInternal Server Error.\n"
+                       "Please try again later."));
         return -1;
     }
     else if(banned) {
@@ -146,8 +154,8 @@ static int handle_login0(login_client_t *c, login_login0_pkt *pkt) {
 
     /* If we can't query the database, fail. */
     if(sylverant_db_query(&conn, query)) {
-        send_large_msg(c, "\tEInternal Server Error.\n"
-                       "Please try again later.");
+        send_large_msg(c, __(c, "\tEInternal Server Error.\n"
+                       "Please try again later."));
         return -1;
     }
 
@@ -186,8 +194,8 @@ static int handle_login3(login_client_t *c, login_dclogin_pkt *pkt) {
 
     /* If we can't query the database, fail. */
     if(sylverant_db_query(&conn, query)) {
-        send_large_msg(c, "\tEInternal Server Error.\n"
-                       "Please try again later.");
+        send_large_msg(c, __(c, "\tEInternal Server Error.\n"
+                       "Please try again later."));
         return -1;
     }
 
@@ -205,8 +213,8 @@ static int handle_login3(login_client_t *c, login_dclogin_pkt *pkt) {
         sprintf(query, "INSERT INTO guildcards (account_id) VALUES (NULL)");
 
         if(sylverant_db_query(&conn, query)) {
-            send_large_msg(c, "\tEInternal Server Error.\n"
-                           "Please try again later.");
+            send_large_msg(c, __(c, "\tEInternal Server Error.\n"
+                           "Please try again later."));
             return -1;
         }
 
@@ -219,8 +227,8 @@ static int handle_login3(login_client_t *c, login_dclogin_pkt *pkt) {
                 "'%s')", gc, serial, access, dc_id);
 
         if(sylverant_db_query(&conn, query)) {
-            send_large_msg(c, "\tEInternal Server Error.\n"
-                           "Please try again later.");
+            send_large_msg(c, __(c, "\tEInternal Server Error.\n"
+                           "Please try again later."));
             return -1;
         }
     }
@@ -229,8 +237,8 @@ static int handle_login3(login_client_t *c, login_dclogin_pkt *pkt) {
     banned = is_gc_banned(gc, &banlen, query);
 
     if(banned == -1) {
-        send_large_msg(c, "\tEInternal Server Error.\n"
-                       "Please try again later.");
+        send_large_msg(c, __(c, "\tEInternal Server Error.\n"
+                       "Please try again later."));
         return -1;
     }
     else if(banned) {
@@ -243,8 +251,8 @@ static int handle_login3(login_client_t *c, login_dclogin_pkt *pkt) {
             "WHERE guildcard='%u'", gc);
 
     if(sylverant_db_query(&conn, query)) {
-        send_large_msg(c, "\tEInternal Server Error.\n"
-                       "Please try again later.");
+        send_large_msg(c, __(c, "\tEInternal Server Error.\n"
+                       "Please try again later."));
         return -1;
     }
 
@@ -663,7 +671,7 @@ int process_dclogin_packet(login_client_t *c, void *pkt) {
 
         case LOGIN_INFO_REQUEST_TYPE:
             /* XXXX: Actually send something relevant! */
-            return send_info_reply(c, "\tENothing here.");
+            return send_info_reply(c, __(c, "\tENothing here."));
 
         case LOGIN_SHIP_SELECT_TYPE:
             /* XXXX: This might actually work, at least if there's a ship. */
@@ -690,4 +698,42 @@ int process_dclogin_packet(login_client_t *c, void *pkt) {
     }
 
     return 0;
+}
+
+/* Initialize mini18n support. */
+void init_i18n(void) {
+#ifdef HAVE_LIBMINI18N
+	int i;
+	char filename[256];
+
+	for(i = 0; i < CLIENT_LANG_COUNT; ++i) {
+		langs[i] = mini18n_create();
+
+		if(langs[i]) {
+			sprintf(filename, "l10n/login_server-%s.yts", language_codes[i]);
+
+			/* Attempt to load the l10n file. */
+			if(mini18n_load(langs[i], filename)) {
+				/* If we didn't get it, clean up. */
+				mini18n_destroy(langs[i]);
+				langs[i] = NULL;
+			}
+			else {
+				debug(DBG_LOG, "Read l10n file for %s\n", language_codes[i]);
+			}
+		}
+	}
+#endif
+}
+
+/* Clean up when we're done with mini18n. */
+void cleanup_i18n(void) {
+#ifdef HAVE_LIBMINI18N
+	int i;
+
+	/* Just call the destroy function... It'll handle null values fine. */
+	for(i = 0; i < CLIENT_LANG_COUNT; ++i) {
+		mini18n_destroy(langs[i]);
+	}
+#endif
 }
