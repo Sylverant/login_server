@@ -1,4 +1,4 @@
-LANGS=fr
+LANGS=fr sp
 
 dist-hook:
 	@for l in $(LANGS) ; do \
@@ -6,7 +6,7 @@ dist-hook:
 	done
 
 install-data-hook:
-	test -z "$(DESTDIR)$(datadir)/sylverant/l10n" || $(MKDIR_P) "$(DESTDIR)$(datadir)/sylverant/l10n"
+	test -z "$(DESTDIR)$(datadir)/sylverant/l10n" || mkdir -p "$(DESTDIR)$(datadir)/sylverant/l10n"
 	@for l in $(LANGS) ; do \
 		echo " $(INSTALL_DATA) $(PACKAGE)-$$l.yts $(DESTDIR)$(datadir)/sylverant/l10n/$(PACKAGE)-$$l.yts" ; \
 		$(INSTALL_DATA) "$(srcdir)/$(PACKAGE)-$$l.yts" "$(DESTDIR)$(datadir)/sylverant/l10n/$(PACKAGE)-$$l.yts" ; \
