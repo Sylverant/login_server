@@ -28,38 +28,9 @@
 /* Determine if a client is in our LAN */
 #define IN_NET(c, s, n) ((c & n) == (s & n))
 
-#ifdef PACKED
-#undef PACKED
-#endif
-
-#define PACKED __attribute__((packed))
-
-/* The common packet header on top of all packets. */
-typedef struct bb_pkt_header {
-    uint16_t pkt_len;
-    uint16_t pkt_type;
-    uint32_t padding;
-} PACKED bb_pkt_header_t;
-
-typedef struct dc_pkt_header {
-    uint8_t pkt_type;
-    uint8_t flags;
-    uint16_t pkt_len;
-} PACKED dc_pkt_header_t;
-
-typedef struct pc_pkt_header {
-    uint16_t pkt_len;
-    uint8_t pkt_type;
-    uint8_t flags;
-} PACKED pc_pkt_header_t;
-
-typedef union pkt_header {
-    bb_pkt_header_t bb;
-    dc_pkt_header_t dc;
-    pc_pkt_header_t pc;
-} pkt_header_t;
-
-#undef PACKED
+#define PACKETS_H_HEADERS_ONLY
+#include "packets.h"
+#undef PACKETS_H_HEADERS_ONLY
 
 /* Login server client structure. */
 typedef struct login_client {
@@ -95,6 +66,7 @@ typedef struct login_client {
 
     uint8_t *gc_data;
     int dressflag;
+    int hdr_read;
 } login_client_t;
 
 /* Values for the type of the login_client_t */
@@ -140,8 +112,6 @@ extern sylverant_config_t cfg;
 login_client_t *create_connection(int sock, in_addr_t ip, int type);
 void destroy_connection(login_client_t *c);
 
-int process_login_packet(login_client_t *c, bb_pkt_header_t *hdr);
-int process_character_packet(login_client_t *c, bb_pkt_header_t *hdr);
 int process_dclogin_packet(login_client_t *c, void *pkt);
 
 int read_from_client(login_client_t *c);

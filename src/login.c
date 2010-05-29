@@ -180,9 +180,10 @@ int read_from_client(login_client_t *c) {
         while(sz >= c->hdr_size && rv == 0) {
             /* Decrypt the packet header so we know what exactly we're looking
                for, in terms of packet length. */
-            if(!c->pkt.bb.pkt_type) {
+            if(!c->hdr_read) {
                 memcpy(&c->pkt, rbp, c->hdr_size);
                 CRYPT_CryptData(&c->client_cipher, &c->pkt, c->hdr_size, 0);
+                c->hdr_read = 1;
             }
 
             switch(c->type) {
@@ -221,7 +222,7 @@ int read_from_client(login_client_t *c) {
                 rbp += pkt_sz;
                 sz -= pkt_sz;
                 
-                c->pkt.bb.pkt_type = c->pkt.bb.pkt_len = 0;
+                c->hdr_read = 0;
             }
             else {
                 /* Nope, we're missing part, break out of the loop, and buffer

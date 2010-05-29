@@ -126,7 +126,7 @@ static int send_ban_msg(login_client_t *c, time_t until, const char *reason) {
 }
 
 /* Handle a client's login request packet. */
-static int handle_login0(login_client_t *c, login_login0_pkt *pkt) {
+static int handle_login0(login_client_t *c, dc_login_90_pkt *pkt) {
     char query[256],  serial[32], access[32];
     void *result;
     char **row;
@@ -170,10 +170,10 @@ static int handle_login0(login_client_t *c, login_login0_pkt *pkt) {
 
     c->version = SYLVERANT_QUEST_V1;
 
-    return send_simple(c, LOGIN_DC_LOGIN0_TYPE, resp);
+    return send_simple(c, LOGIN_90_TYPE, resp);
 }
 
-static int handle_login3(login_client_t *c, login_dclogin_pkt *pkt) {
+static int handle_login3(login_client_t *c, dc_login_93_pkt *pkt) {
     uint32_t gc;
     char query[256], dc_id[32], serial[32], access[32];
     void *result;
@@ -271,7 +271,7 @@ static int handle_login3(login_client_t *c, login_dclogin_pkt *pkt) {
 
 /* Handle a client's login request packet (yes, this function is the same as the
    one above, but it uses a different structure). */
-static int handle_logina(login_client_t *c, login_dcv2login_pkt *pkt) {
+static int handle_logina(login_client_t *c, dcv2_login_9a_pkt *pkt) {
     uint32_t gc;
     char query[256], dc_id[32], serial[32], access[32];
     void *result;
@@ -281,7 +281,7 @@ static int handle_logina(login_client_t *c, login_dcv2login_pkt *pkt) {
 
     /* Make sure the user isn't IP banned. */
     if(banned == -1) {
-        return send_simple(c, LOGIN_DCV2_LOGINA_TYPE, LOGIN_9A_ERROR);
+        return send_simple(c, LOGIN_9A_TYPE, LOGIN_9A_ERROR);
     }
     else if(banned) {
         send_ban_msg(c, banlen, query);
@@ -307,7 +307,7 @@ static int handle_logina(login_client_t *c, login_dcv2login_pkt *pkt) {
 
     /* If we can't query the database, fail. */
     if(sylverant_db_query(&conn, query)) {
-        return send_simple(c, LOGIN_DCV2_LOGINA_TYPE, LOGIN_9A_ERROR);
+        return send_simple(c, LOGIN_9A_TYPE, LOGIN_9A_ERROR);
     }
 
     result = sylverant_db_result_store(&conn);
@@ -322,7 +322,7 @@ static int handle_logina(login_client_t *c, login_dcv2login_pkt *pkt) {
            registered or they've put their information in wrong. Disconnect them
            so that they can fix that problem. */
         sylverant_db_result_free(result);
-        return send_simple(c, LOGIN_DCV2_LOGINA_TYPE, LOGIN_9A_BAD_SERIAL);
+        return send_simple(c, LOGIN_9A_TYPE, LOGIN_9A_BAD_SERIAL);
     }
     else {
         /* If we get here, we have a PSOv2 (DC) user that isn't known to the
@@ -333,7 +333,7 @@ static int handle_logina(login_client_t *c, login_dcv2login_pkt *pkt) {
         sprintf(query, "INSERT INTO guildcards (account_id) VALUES (NULL)");
 
         if(sylverant_db_query(&conn, query)) {
-            return send_simple(c, LOGIN_DCV2_LOGINA_TYPE, LOGIN_9A_ERROR);
+            return send_simple(c, LOGIN_9A_TYPE, LOGIN_9A_ERROR);
         }
 
         /* Grab the new guildcard for the user. */
@@ -345,7 +345,7 @@ static int handle_logina(login_client_t *c, login_dcv2login_pkt *pkt) {
                 "'%s')", gc, serial, access, dc_id);
 
         if(sylverant_db_query(&conn, query)) {
-            return send_simple(c, LOGIN_DCV2_LOGINA_TYPE, LOGIN_9A_ERROR);
+            return send_simple(c, LOGIN_9A_TYPE, LOGIN_9A_ERROR);
         }
     }
 
@@ -353,7 +353,7 @@ static int handle_logina(login_client_t *c, login_dcv2login_pkt *pkt) {
     banned = is_gc_banned(gc, &banlen, query);
 
     if(banned == -1) {
-        return send_simple(c, LOGIN_DCV2_LOGINA_TYPE, LOGIN_9A_ERROR);
+        return send_simple(c, LOGIN_9A_TYPE, LOGIN_9A_ERROR);
     }
     else if(banned) {
         send_ban_msg(c, banlen, query);
@@ -365,7 +365,7 @@ static int handle_logina(login_client_t *c, login_dcv2login_pkt *pkt) {
             "WHERE guildcard='%u'", gc);
 
     if(sylverant_db_query(&conn, query)) {
-        return send_simple(c, LOGIN_DCV2_LOGINA_TYPE, LOGIN_9A_ERROR);
+        return send_simple(c, LOGIN_9A_TYPE, LOGIN_9A_ERROR);
     }
 
     result = sylverant_db_result_store(&conn);
@@ -382,12 +382,12 @@ static int handle_logina(login_client_t *c, login_dcv2login_pkt *pkt) {
 
     /* Force them to send us a 0x9D so we have their language code, since this
        packet doesn't have it. */
-    return send_simple(c, LOGIN_DCV2_LOGINA_TYPE, LOGIN_9A_OK2);
+    return send_simple(c, LOGIN_9A_TYPE, LOGIN_9A_OK2);
 }
 
 /* The next few functions look the same pretty much... All added for gamecube
    support. */
-static int handle_gchlcheck(login_client_t *c, login_gc_hlcheck_pkt *pkt) {
+static int handle_gchlcheck(login_client_t *c, gc_hlcheck_pkt *pkt) {
     uint32_t account, gc;
     char query[256], serial[32], access[32];
     void *result;
@@ -397,11 +397,11 @@ static int handle_gchlcheck(login_client_t *c, login_gc_hlcheck_pkt *pkt) {
 
     /* Make sure the user isn't IP banned. */
     if(banned == -1) {
-        return send_simple(c, LOGIN_DCV2_LOGINA_TYPE, LOGIN_DB_CONN_ERROR);
+        return send_simple(c, LOGIN_9A_TYPE, LOGIN_DB_CONN_ERROR);
     }
     else if(banned) {
         send_ban_msg(c, banlen, query);
-        return send_simple(c, LOGIN_DCV2_LOGINA_TYPE, LOGIN_DB_SUSPENDED);
+        return send_simple(c, LOGIN_9A_TYPE, LOGIN_DB_SUSPENDED);
     }
 
     /* Escape all the important strings. */
@@ -413,7 +413,7 @@ static int handle_gchlcheck(login_client_t *c, login_gc_hlcheck_pkt *pkt) {
 
     /* If we can't query the database, fail. */
     if(sylverant_db_query(&conn, query)) {
-        return send_simple(c, LOGIN_DCV2_LOGINA_TYPE, LOGIN_DB_CONN_ERROR);
+        return send_simple(c, LOGIN_9A_TYPE, LOGIN_DB_CONN_ERROR);
     }
 
     result = sylverant_db_result_store(&conn);
@@ -426,11 +426,11 @@ static int handle_gchlcheck(login_client_t *c, login_gc_hlcheck_pkt *pkt) {
         banned = is_gc_banned(gc, &banlen, query);
 
         if(banned == -1) {
-            return send_simple(c, LOGIN_DCV2_LOGINA_TYPE, LOGIN_DB_CONN_ERROR);
+            return send_simple(c, LOGIN_9A_TYPE, LOGIN_DB_CONN_ERROR);
         }
         else if(banned) {
             send_ban_msg(c, banlen, query);
-            return send_simple(c, LOGIN_DCV2_LOGINA_TYPE, LOGIN_DB_SUSPENDED);
+            return send_simple(c, LOGIN_9A_TYPE, LOGIN_DB_SUSPENDED);
         }
 
         /* The client has at least registered, check the password...
@@ -439,13 +439,13 @@ static int handle_gchlcheck(login_client_t *c, login_gc_hlcheck_pkt *pkt) {
                 gc);
 
         if(sylverant_db_query(&conn, query)) {
-            return send_simple(c, LOGIN_DCV2_LOGINA_TYPE, LOGIN_DB_CONN_ERROR);
+            return send_simple(c, LOGIN_9A_TYPE, LOGIN_DB_CONN_ERROR);
         }
 
         result = sylverant_db_result_store(&conn);
 
         if(!(row = sylverant_db_result_fetch(result))) {
-            return send_simple(c, LOGIN_DCV2_LOGINA_TYPE, LOGIN_DB_CONN_ERROR);
+            return send_simple(c, LOGIN_9A_TYPE, LOGIN_DB_CONN_ERROR);
         }
 
         account = (uint32_t)strtoul(row[0], NULL, 0);
@@ -456,24 +456,24 @@ static int handle_gchlcheck(login_client_t *c, login_gc_hlcheck_pkt *pkt) {
 
         /* If we can't query the DB, fail. */
         if(sylverant_db_query(&conn, query)) {
-            return send_simple(c, LOGIN_DCV2_LOGINA_TYPE, LOGIN_DB_CONN_ERROR);
+            return send_simple(c, LOGIN_9A_TYPE, LOGIN_DB_CONN_ERROR);
         }
 
         result = sylverant_db_result_store(&conn);
 
         if((row = sylverant_db_result_fetch(result))) {
             c->is_gm = atoi(row[0]);
-            return send_simple(c, LOGIN_DCV2_LOGINA_TYPE, LOGIN_DB_OK);
+            return send_simple(c, LOGIN_9A_TYPE, LOGIN_DB_OK);
         }
     }
 
     sylverant_db_result_free(result);
 
     /* If we get here, we didn't find them, bail out. */
-    return send_simple(c, LOGIN_DCV2_LOGINA_TYPE, LOGIN_DB_CONN_ERROR);
+    return send_simple(c, LOGIN_9A_TYPE, LOGIN_DB_CONN_ERROR);
 }
 
-static int handle_gcloginc(login_client_t *c, login_gc_loginc_pkt *pkt) {
+static int handle_gcloginc(login_client_t *c, gc_login_9c_pkt *pkt) {
     uint32_t account, gc;
     char query[256], serial[32], access[32];
     void *result;
@@ -544,10 +544,10 @@ static int handle_gcloginc(login_client_t *c, login_gc_loginc_pkt *pkt) {
 
             if(!strcmp(row[0], query)) {
                 sylverant_db_result_free(result);
-                return send_simple(c, LOGIN_GC_LOGINC_TYPE, LOGIN_9CGC_OK);
+                return send_simple(c, LOGIN_9C_TYPE, LOGIN_9CGC_OK);
             }
             else {
-                return send_simple(c, LOGIN_GC_LOGINC_TYPE, LOGIN_9CGC_BAD_PWD);
+                return send_simple(c, LOGIN_9C_TYPE, LOGIN_9CGC_BAD_PWD);
             }
         }
     }
@@ -558,7 +558,7 @@ static int handle_gcloginc(login_client_t *c, login_gc_loginc_pkt *pkt) {
     return -1;
 }
 
-static int handle_gclogine(login_client_t *c, login_login_de_pkt *pkt) {
+static int handle_gclogine(login_client_t *c, gc_login_9e_pkt *pkt) {
     uint32_t gc;
     char query[256], serial[32], access[32];
     void *result;
@@ -594,7 +594,7 @@ static int handle_gclogine(login_client_t *c, login_login_de_pkt *pkt) {
     return -1;
 }
 
-static int handle_logind(login_client_t *c, login_login_de_pkt *pkt) {
+static int handle_logind(login_client_t *c, dcv2_login_9d_pkt *pkt) {
     /* We made clients send this packet just specifically to grab the language
        code... All the real checking has been done elsewhere. */
     c->language_code = pkt->language_code;
@@ -603,8 +603,7 @@ static int handle_logind(login_client_t *c, login_login_de_pkt *pkt) {
 }
 
 /* Handle a client's ship select packet. */
-static int handle_ship_select(login_client_t *c,
-                              dc_login_ship_select_pkt *pkt) {
+static int handle_ship_select(login_client_t *c, dc_select_pkt *pkt) {
     extern int ship_transfer(login_client_t *c, uint32_t shipid);
     sylverant_quest_list_t *l = &qlist[c->type][c->language_code];
 
@@ -625,8 +624,8 @@ static int handle_ship_select(login_client_t *c,
 
 /* Process one login packet. */
 int process_dclogin_packet(login_client_t *c, void *pkt) {
-    dc_pkt_header_t *dc = (dc_pkt_header_t *)pkt;
-    pc_pkt_header_t *pc = (pc_pkt_header_t *)pkt;
+    dc_pkt_hdr_t *dc = (dc_pkt_hdr_t *)pkt;
+    pc_pkt_hdr_t *pc = (pc_pkt_hdr_t *)pkt;
     uint8_t type;
 
     if(c->type == CLIENT_TYPE_DC || c->type == CLIENT_TYPE_GC) {
@@ -639,59 +638,59 @@ int process_dclogin_packet(login_client_t *c, void *pkt) {
     debug(DBG_LOG, "DC/PC/GC: Receieved type 0x%02X\n", type);
 
     switch(type) {
-        case LOGIN_DC_LOGIN0_TYPE:
+        case LOGIN_90_TYPE:
             /* XXXX: Hey! this does something now! */
-            return handle_login0(c, (login_login0_pkt *)pkt);
+            return handle_login0(c, (dc_login_90_pkt *)pkt);
 
-        case LOGIN_DC_LOGIN2_TYPE:
+        case LOGIN_92_TYPE:
             /* XXXX: Do something with this sometime. */
-            return send_simple(c, LOGIN_DC_LOGIN2_TYPE, LOGIN_92_OK);
+            return send_simple(c, LOGIN_92_TYPE, LOGIN_92_OK);
 
-        case LOGIN_CLIENT_LOGIN_TYPE:
+        case LOGIN_93_TYPE:
             /* XXXX: Figure this all out sometime. */
-            return handle_login3(c, (login_dclogin_pkt *)pkt);
+            return handle_login3(c, (dc_login_93_pkt *)pkt);
 
-        case LOGIN_DCV2_LOGINA_TYPE:
+        case LOGIN_9A_TYPE:
             /* XXXX: You had to switch packets on me, didn't you Sega? */
-            return handle_logina(c, (login_dcv2login_pkt *)pkt);
+            return handle_logina(c, (dcv2_login_9a_pkt *)pkt);
 
-        case LOGIN_DC_CHECKSUM_TYPE:
+        case CHECKSUM_TYPE:
             /* XXXX: ??? */
-            return send_simple(c, LOGIN_DC_CHECKSUM_REPLY_TYPE, 1);
+            return send_simple(c, CHECKSUM_REPLY_TYPE, 1);
 
-        case LOGIN_TIMESTAMP_TYPE:
+        case TIMESTAMP_TYPE:
             /* XXXX: Actually, I've got nothing here. */
             return send_timestamp(c);
 
-        case LOGIN_DC_SHIP_LIST_REQ_TYPE:
-        case LOGIN_SHIP_LIST_TYPE:
+        case SHIP_LIST_REQ_TYPE:
+        case SHIP_LIST_TYPE:
             /* XXXX: I don't have anything here either, but thought I'd be
                funny anyway. */
             return send_ship_list(c);
 
-        case LOGIN_INFO_REQUEST_TYPE:
+        case INFO_REQUEST_TYPE:
             /* XXXX: Actually send something relevant! */
             return send_info_reply(c, __(c, "\tENothing here."));
 
-        case LOGIN_SHIP_SELECT_TYPE:
+        case MENU_SELECT_TYPE:
             /* XXXX: This might actually work, at least if there's a ship. */
-            return handle_ship_select(c, (dc_login_ship_select_pkt *)pkt);
+            return handle_ship_select(c, (dc_select_pkt *)pkt);
 
-        case LOGIN_GC_VERIFY_LICENSE_TYPE:
+        case GC_VERIFY_LICENSE_TYPE:
             /* XXXX: Why in the world do they duplicate so much data here? */
-            return handle_gchlcheck(c, (login_gc_hlcheck_pkt *)pkt);
+            return handle_gchlcheck(c, (gc_hlcheck_pkt *)pkt);
 
-        case LOGIN_GC_LOGINC_TYPE:
+        case LOGIN_9C_TYPE:
             /* XXXX: Yep... check things here too. */
-            return handle_gcloginc(c, (login_gc_loginc_pkt *)pkt);
+            return handle_gcloginc(c, (gc_login_9c_pkt *)pkt);
 
-        case LOGIN_GC_LOGINE_TYPE:
+        case LOGIN_9E_TYPE:
             /* XXXX: One final check, and give them their guildcard. */
-            return handle_gclogine(c, (login_login_de_pkt *)pkt);
+            return handle_gclogine(c, (gc_login_9e_pkt *)pkt);
 
-        case LOGIN_LOGIND_TYPE:
+        case LOGIN_9D_TYPE:
             /* XXXX: All this work for a language code... */
-            return handle_logind(c, (login_login_de_pkt *)pkt);
+            return handle_logind(c, (dcv2_login_9d_pkt *)pkt);
 
         default:
             return -3;
