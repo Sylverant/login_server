@@ -159,10 +159,12 @@ int read_from_client(login_client_t *c) {
         if(c->pkt.dc.pkt_type == 0x90 && c->pkt.dc.flags == 0 &&
            LE16(c->pkt.dc.pkt_len) == 0x0028) {
             c->got_first = 1;
+            c->hdr_read = 1;
         }
         else if(c->pkt.dc.pkt_type == 0x9A && c->pkt.dc.flags == 0 &&
                 LE16(c->pkt.dc.pkt_len) == 0x00E0) {
             c->got_first = 1;
+            c->hdr_read = 1;
         }
         /* If we end up in here, its pretty much gotta be a Gamecube client, or
            someone messing with us. */
