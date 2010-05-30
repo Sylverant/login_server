@@ -112,11 +112,11 @@ int send_dc_welcome(login_client_t *c, uint32_t svect, uint32_t cvect) {
     /* Fill in the header */
     if(c->type == CLIENT_TYPE_DC || c->type == CLIENT_TYPE_GC) {
         pkt->hdr.dc.pkt_len = LE16(DC_WELCOME_LENGTH);
-        pkt->hdr.dc.pkt_type = WELCOME_TYPE;
+        pkt->hdr.dc.pkt_type = LOGIN_WELCOME_TYPE;
     }
     else {
         pkt->hdr.pc.pkt_len = LE16(DC_WELCOME_LENGTH);
-        pkt->hdr.pc.pkt_type = WELCOME_TYPE;
+        pkt->hdr.pc.pkt_type = LOGIN_WELCOME_TYPE;
     }
 
     /* Fill in the required message */

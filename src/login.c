@@ -131,7 +131,6 @@ int read_from_client(login_client_t *c) {
        the rest of this a bit easier. */
     if(c->recvbuf_cur) {
         memcpy(recvbuf, c->recvbuf, c->recvbuf_cur);
-        
     }
 
     /* Attempt to read, and if we don't get anything, punt. */
