@@ -41,6 +41,70 @@ static mini18n_t langs[CLIENT_LANG_COUNT];
 
 extern sylverant_quest_list_t qlist[CLIENT_TYPE_COUNT][CLIENT_LANG_COUNT];
 
+static void print_packet(unsigned char *pkt, int len) {
+    unsigned char *pos = pkt, *row = pkt;
+    int line = 0, type = 0;
+
+    /* Print the packet both in hex and ASCII. */
+    while(pos < pkt + len) {
+        if(type == 0) {
+            printf("%02X ", *pos);
+        }
+        else {
+            if(*pos >= 0x20 && *pos < 0x7F) {
+                printf("%c", *pos);
+            }
+            else {
+                printf(".");
+            }
+        }
+
+        ++line;
+        ++pos;
+
+        if(line == 16) {
+            if(type == 0) {
+                printf("\t");
+                pos = row;
+                type = 1;
+                line = 0;
+            }
+            else {
+                printf("\n");
+                line = 0;
+                row = pos;
+                type = 0;
+            }
+        }
+    }
+
+    /* Finish off the last row's ASCII if needed. */
+    if(len & 0x1F) {
+        /* Put spaces in place of the missing hex stuff. */
+        while(line != 16) {
+            printf("   ");
+            ++line;
+        }
+
+        pos = row;
+        printf("\t");
+
+        /* Here comes the ASCII. */
+        while(pos < pkt + len) {
+            if(*pos >= 0x20 && *pos < 0x7F) {
+                printf("%c", *pos);
+            }
+            else {
+                printf(".");
+            }
+            
+            ++pos;
+        }
+
+        printf("\n");
+    }
+}
+
 /* Check if an IP has been IP banned from the server. */
 static int is_ip_banned(in_addr_t ip, time_t *until, char *reason) {
     char query[256];
@@ -627,12 +691,15 @@ int process_dclogin_packet(login_client_t *c, void *pkt) {
     dc_pkt_hdr_t *dc = (dc_pkt_hdr_t *)pkt;
     pc_pkt_hdr_t *pc = (pc_pkt_hdr_t *)pkt;
     uint8_t type;
+    uint16_t len;
 
     if(c->type == CLIENT_TYPE_DC || c->type == CLIENT_TYPE_GC) {
         type = dc->pkt_type;
+        len = LE16(dc->pkt_len);
     }
     else {
         type = pc->pkt_type;
+        len = LE16(pc->pkt_len);
     }
 
     debug(DBG_LOG, "DC/PC/GC: Receieved type 0x%02X\n", type);
@@ -656,7 +723,11 @@ int process_dclogin_packet(login_client_t *c, void *pkt) {
 
         case CHECKSUM_TYPE:
             /* XXXX: ??? */
-            return send_simple(c, CHECKSUM_REPLY_TYPE, 1);
+            if(send_simple(c, CHECKSUM_REPLY_TYPE, 1)) {
+                return -1;
+            }
+
+            return send_simple(c, CHAR_DATA_REQUEST_TYPE, 0);
 
         case TIMESTAMP_TYPE:
             /* XXXX: Actually, I've got nothing here. */
@@ -692,7 +763,12 @@ int process_dclogin_packet(login_client_t *c, void *pkt) {
             /* XXXX: All this work for a language code... */
             return handle_logind(c, (dcv2_login_9d_pkt *)pkt);
 
+        case CHAR_DATA_TYPE:
+            /* XXXX: Do something with this... */
+            return 0;
+
         default:
+            print_packet((unsigned char *)pkt, len);
             return -3;
     }
 
