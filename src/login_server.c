@@ -35,7 +35,6 @@
 #include <sylverant/checksum.h>
 #include <sylverant/database.h>
 #include <sylverant/encryption.h>
-#include <sylverant/characters.h>
 #include <sylverant/mtwist.h>
 #include <sylverant/debug.h>
 #include <sylverant/quest.h>
@@ -255,7 +254,8 @@ static int get_ip_info() {
     return 0;
 }
 
-static void run_server(int dcsock, int pcsock, int gcsocks[NUM_GCSOCKS]) {
+static void run_server(int dcsock, int pcsock, int gcsocks[NUM_GCSOCKS],
+                       int websock) {
     fd_set readfds, writefds;
     struct timeval timeout;
     socklen_t len;
@@ -263,6 +263,7 @@ static void run_server(int dcsock, int pcsock, int gcsocks[NUM_GCSOCKS]) {
     int nfds, asock, j;
     login_client_t *i, *tmp;
     ssize_t sent;
+    uint32_t client_count;
 
     for(;;) {        
         /* Clear the fd_sets so we can use them. */
@@ -271,6 +272,7 @@ static void run_server(int dcsock, int pcsock, int gcsocks[NUM_GCSOCKS]) {
         timeout.tv_sec = 9001;
         timeout.tv_usec = 0;
         nfds = 0;
+        client_count = 0;
 
         /* Fill the sockets into the fd_set so we can use select below. */
         TAILQ_FOREACH(i, &clients, qentry) {
@@ -282,6 +284,7 @@ static void run_server(int dcsock, int pcsock, int gcsocks[NUM_GCSOCKS]) {
             }
 
             nfds = nfds > i->sock ? nfds : i->sock;
+            ++client_count;
         }
 
         /* Add the listening sockets for incoming connections to the fd_set. */
@@ -289,6 +292,8 @@ static void run_server(int dcsock, int pcsock, int gcsocks[NUM_GCSOCKS]) {
         nfds = nfds > dcsock ? nfds : dcsock;
         FD_SET(pcsock, &readfds);
         nfds = nfds > pcsock ? nfds : pcsock;
+        FD_SET(websock, &readfds);
+        nfds = nfds > websock ? nfds : websock;
 
         for(j = 0; j < NUM_GCSOCKS; ++j) {
             FD_SET(gcsocks[j], &readfds);
@@ -312,6 +317,9 @@ static void run_server(int dcsock, int pcsock, int gcsocks[NUM_GCSOCKS]) {
                                      CLIENT_TYPE_DC) == NULL) {
                     close(asock);
                 }
+                else {
+                    ++client_count;
+                }
             }
 
             if(FD_ISSET(pcsock, &readfds)) {
@@ -328,6 +336,9 @@ static void run_server(int dcsock, int pcsock, int gcsocks[NUM_GCSOCKS]) {
                 if(create_connection(asock, addr.sin_addr.s_addr,
                                      CLIENT_TYPE_PC) == NULL) {
                     close(asock);
+                }
+                else {
+                    ++client_count;
                 }
             }
 
@@ -347,6 +358,28 @@ static void run_server(int dcsock, int pcsock, int gcsocks[NUM_GCSOCKS]) {
                                          CLIENT_TYPE_GC) == NULL) {
                         close(asock);
                     }
+                    else {
+                        ++client_count;
+                    }
+                }
+            }
+
+            if(FD_ISSET(websock, &readfds)) {
+                len = sizeof(struct sockaddr_in);
+
+                if((asock = accept(websock, (struct sockaddr *)&addr,
+                                   &len)) < 0) {
+                    perror("accept");
+                }
+                else {
+                    debug(DBG_LOG, "Accepted web connection from %s\n",
+                          inet_ntoa(addr.sin_addr));
+
+                    /* Send the number of connected clients, and close the
+                       socket. */
+                    client_count = LE32(client_count);
+                    send(asock, &client_count, 4, 0);
+                    close(asock);
                 }
             }
 
@@ -441,7 +474,7 @@ static int open_sock(uint16_t port) {
 }
 
 int main(int argc, char *argv[]) {
-    int dcsock, pcsock, i, j;
+    int dcsock, pcsock, websock, i, j;
     int gcsocks[NUM_GCSOCKS];
 
     chdir(SYLVERANT_DIRECTORY);
@@ -498,12 +531,20 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
+    debug(DBG_LOG, "Opening Web port (10003) for connections.\n");
+    websock = open_sock(10003);
+
+    if(websock < 0) {
+        exit(EXIT_FAILURE);
+    }
+
     /* Run the login server. */
-    run_server(dcsock, pcsock, gcsocks);
+    run_server(dcsock, pcsock, gcsocks, websock);
 
     /* Clean up. */
     close(dcsock);
     close(pcsock);
+    close(websock);
 
     for(i = 0; i < NUM_GCSOCKS; ++i) {
         close(gcsocks[i]);

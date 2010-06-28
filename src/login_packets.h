@@ -21,7 +21,6 @@
 #include <inttypes.h>
 #include <netinet/in.h>
 
-#include <sylverant/characters.h>
 #include <sylverant/encryption.h>
 #include <sylverant/quest.h>
 
@@ -36,14 +35,6 @@ const static char login_bb_welcome_copyright[] =
 /* This must be placed into the copyright field in the DC welcome packet. */
 const static char login_dc_welcome_copyright[] =
     "DreamCast Port Map. Copyright SEGA Enterprises. 1999";
-
-/* Values for the reason of an acknowledgement of a character. */
-#define ACK_CREATE                          0
-#define ACK_SELECT                          1
-#define ACK_NONEXISTANT                     2
-
-/* Send a Blue Burst Welcome packet to the given client. */
-int send_bb_welcome(login_client_t *c, uint8_t svect[48], uint8_t cvect[48]);
 
 /* Send a Dreamcast Welcome packet to the given client. */
 int send_dc_welcome(login_client_t *c, uint32_t svect, uint32_t cvect);
@@ -60,27 +51,6 @@ int send_redirect(login_client_t *c, in_addr_t ip, uint16_t port);
 
 /* Send a timestamp packet to the given client. */
 int send_timestamp(login_client_t *c);
-
-/* Send a scrolling message packet to the given client. */
-int send_scroll_msg(login_client_t *c, char msg[]);
-
-/* Send a option reply packet to the given client. */
-int send_optreply(login_client_t *c, uint8_t keys[420]);
-
-/* Send a character ack to the given client. */
-int send_char_ack(login_client_t *c, uint8_t slot, uint8_t reason);
-
-/* Send character data to the given client. */
-int send_char_data(login_client_t *c, sylverant_mini_char_t *ch);
-
-/* Send a guild card checksum ack to the given client. */
-int send_guild_ack(login_client_t *c, uint32_t ack);
-
-/* Send a guild card checksum packet to the given client. */
-int send_gc_checksum(login_client_t *c, uint32_t checksum);
-
-/* Send guild card data to the given client. */
-int send_gc_data(login_client_t *c, uint8_t *data, uint8_t idx);
 
 /* Send the list of ships to the client. */
 int send_ship_list(login_client_t *c);
