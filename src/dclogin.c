@@ -27,8 +27,10 @@
 #include <sylverant/database.h>
 #include <sylverant/quest.h>
 #include <sylverant/md5.h>
+#include <sylverant/items.h>
 
 #include "login.h"
+#include "player.h"
 #include "login_packets.h"
 
 #ifdef HAVE_LIBMINI18N
@@ -40,6 +42,7 @@ static mini18n_t langs[CLIENT_LANG_COUNT];
 #endif
 
 extern sylverant_quest_list_t qlist[CLIENT_TYPE_COUNT][CLIENT_LANG_COUNT];
+extern sylverant_limits_t *limits;
 
 static void print_packet(unsigned char *pkt, int len) {
     unsigned char *pos = pkt, *row = pkt;
@@ -686,6 +689,34 @@ static int handle_ship_select(login_client_t *c, dc_select_pkt *pkt) {
     }
 }
 
+/* Check a player's character data for potential hackery. */
+static int handle_char_data(login_client_t *c, dc_char_data_pkt *pkt) {
+    int j, rv = 1;
+    sylverant_iitem_t *item;
+    player_t *pl = &pkt->data;
+
+    /* If we don't have a legit mode set, then everyone's legit! */
+    if(!limits) {
+        return 0;
+    }
+
+    /* Look through each item */
+    for(j = 0; j < pl->v1.inv.item_count && rv; ++j) {
+        item = (sylverant_iitem_t *)&pl->v1.inv.items[j];
+        rv = sylverant_limits_check_item(limits, item);
+    }
+
+    /* If the person has banned items, boot them */
+    if(!rv) {
+        send_large_msg(c, __(c, "\tEYou have one or more banned items in\n"
+                             "your inventory. Please remove them and\n"
+                             "try again later."));
+        return -1;
+    }
+
+    return 0;
+}
+
 /* Process one login packet. */
 int process_dclogin_packet(login_client_t *c, void *pkt) {
     dc_pkt_hdr_t *dc = (dc_pkt_hdr_t *)pkt;
@@ -764,8 +795,8 @@ int process_dclogin_packet(login_client_t *c, void *pkt) {
             return handle_logind(c, (dcv2_login_9d_pkt *)pkt);
 
         case CHAR_DATA_TYPE:
-            /* XXXX: Do something with this... */
-            return 0;
+            /* XXXX: Gee, I can be mean, can't I? */
+            return handle_char_data(c, (dc_char_data_pkt *)pkt);
 
         default:
             print_packet((unsigned char *)pkt, len);

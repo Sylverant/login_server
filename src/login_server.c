@@ -38,6 +38,7 @@
 #include <sylverant/mtwist.h>
 #include <sylverant/debug.h>
 #include <sylverant/quest.h>
+#include <sylverant/items.h>
 
 #include "login.h"
 #include "login_packets.h"
@@ -47,6 +48,7 @@
 /* Stuff read from the config files */
 sylverant_dbconn_t conn;
 sylverant_config_t cfg;
+sylverant_limits_t *limits = NULL;
 
 sylverant_quest_list_t qlist[CLIENT_TYPE_COUNT][CLIENT_LANG_COUNT];
 
@@ -133,6 +135,13 @@ static void load_config() {
                           language_codes[j]);
                 }
             }
+        }
+    }
+
+    /* Attempt to read the legit items list */
+    if(cfg.limits_file[0]) {
+        if(sylverant_read_limits(cfg.limits_file, &limits)) {
+            debug(DBG_WARN, "Cannot read specified limits file\n");
         }
     }
 
