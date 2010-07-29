@@ -1,0 +1,5 @@
+\tEYou have been banned from this server.\nReason:\n%s\n\nYour ban expires:\n|\tESie wurden von diesem Server verbannt.\nAufgrund von:\n%s\n\nDer Bann endet:\n
+Never|Niemals
+\tEInternal Server Error.\nPlease try again later.|\tEInterner Server Fehler.\nBitte versuchen Sie es später noch einmal.
+\tENothing here.|\tEHier gibt es nichts
+\tEYou have one or more banned items in\nyour inventory. Please remove them and\ntry again later.|\tESie haben ein oder mehrere verbannte\nElemente in Ihrer Inventarliste. Bitte\nentfernen Sie diese und versuchen\nsie es später noch einmal.

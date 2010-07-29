@@ -1,4 +1,4 @@
-LANGS=fr sp
+LANGS=fr sp de
 
 dist-hook:
 	@for l in $(LANGS) ; do \
