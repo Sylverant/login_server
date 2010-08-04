@@ -694,16 +694,31 @@ static int handle_char_data(login_client_t *c, dc_char_data_pkt *pkt) {
     int j, rv = 1;
     sylverant_iitem_t *item;
     player_t *pl = &pkt->data;
+    uint32_t v;
 
     /* If we don't have a legit mode set, then everyone's legit! */
     if(!limits) {
         return 0;
     }
 
+    switch(c->type) {
+        case CLIENT_TYPE_DC:
+        case CLIENT_TYPE_PC:
+            v = ITEM_VERSION_V2;
+            break;
+
+        case CLIENT_TYPE_GC:
+            v = ITEM_VERSION_GC;
+            break;
+
+        default:
+            return -1;
+    }
+
     /* Look through each item */
     for(j = 0; j < pl->v1.inv.item_count && rv; ++j) {
         item = (sylverant_iitem_t *)&pl->v1.inv.items[j];
-        rv = sylverant_limits_check_item(limits, item);
+        rv = sylverant_limits_check_item(limits, item, v);
     }
 
     /* If the person has banned items, boot them */
