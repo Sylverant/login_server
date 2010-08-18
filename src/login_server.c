@@ -43,7 +43,8 @@
 #include "login.h"
 #include "login_packets.h"
 
-#define NUM_GCSOCKS 4
+#define NUM_DCSOCKS 2
+#define NUM_GCSOCKS 3
 
 /* Stuff read from the config files */
 sylverant_dbconn_t conn;
@@ -263,8 +264,8 @@ static int get_ip_info() {
     return 0;
 }
 
-static void run_server(int dcsock, int pcsock, int gcsocks[NUM_GCSOCKS],
-                       int websock) {
+static void run_server(int dcsocks[NUM_DCSOCKS], int pcsock,
+                       int gcsocks[NUM_GCSOCKS], int websock) {
     fd_set readfds, writefds;
     struct timeval timeout;
     socklen_t len;
@@ -297,37 +298,42 @@ static void run_server(int dcsock, int pcsock, int gcsocks[NUM_GCSOCKS],
         }
 
         /* Add the listening sockets for incoming connections to the fd_set. */
-        FD_SET(dcsock, &readfds);
-        nfds = nfds > dcsock ? nfds : dcsock;
-        FD_SET(pcsock, &readfds);
-        nfds = nfds > pcsock ? nfds : pcsock;
-        FD_SET(websock, &readfds);
-        nfds = nfds > websock ? nfds : websock;
+        for(j = 0; j < NUM_DCSOCKS; ++j) {
+            FD_SET(dcsocks[j], &readfds);
+            nfds = nfds > dcsocks[j] ? nfds : dcsocks[j];
+        }
 
         for(j = 0; j < NUM_GCSOCKS; ++j) {
             FD_SET(gcsocks[j], &readfds);
             nfds = nfds > gcsocks[j] ? nfds : gcsocks[j];
         }
 
+        FD_SET(pcsock, &readfds);
+        nfds = nfds > pcsock ? nfds : pcsock;
+        FD_SET(websock, &readfds);
+        nfds = nfds > websock ? nfds : websock;
+
         if(select(nfds + 1, &readfds, &writefds, NULL, &timeout) > 0) {
             /* See if we have an incoming client. */
-            if(FD_ISSET(dcsock, &readfds)) {
-                len = sizeof(struct sockaddr_in);
+            for(j = 0; j < NUM_DCSOCKS; ++j) {
+                if(FD_ISSET(dcsocks[j], &readfds)) {
+                    len = sizeof(struct sockaddr_in);
 
-                if((asock = accept(dcsock, (struct sockaddr *)&addr,
-                                   &len)) < 0) {
-                    perror("accept");
-                }
+                    if((asock = accept(dcsocks[j], (struct sockaddr *)&addr,
+                                       &len)) < 0) {
+                        perror("accept");
+                    }
 
-                debug(DBG_LOG, "Accepted Dreamcast connection from %s\n",
-                      inet_ntoa(addr.sin_addr));
+                    debug(DBG_LOG, "Accepted Dreamcast connection from %s\n",
+                          inet_ntoa(addr.sin_addr));
 
-                if(create_connection(asock, addr.sin_addr.s_addr,
-                                     CLIENT_TYPE_DC) == NULL) {
-                    close(asock);
-                }
-                else {
-                    ++client_count;
+                    if(create_connection(asock, addr.sin_addr.s_addr,
+                                         CLIENT_TYPE_DC) == NULL) {
+                        close(asock);
+                    }
+                    else {
+                        ++client_count;
+                    }
                 }
             }
 
@@ -483,7 +489,8 @@ static int open_sock(uint16_t port) {
 }
 
 int main(int argc, char *argv[]) {
-    int dcsock, pcsock, websock, i, j;
+    int pcsock, websock, i, j;
+    int dcsocks[NUM_DCSOCKS];
     int gcsocks[NUM_GCSOCKS];
 
     chdir(SYLVERANT_DIRECTORY);
@@ -499,9 +506,17 @@ int main(int argc, char *argv[]) {
 
     debug(DBG_LOG, "Opening Dreamcast/EU GC (60hz) port (9200) for "
           "connections.\n");
-    dcsock = open_sock(9200);
+    dcsocks[0] = open_sock(9200);
 
-    if(dcsock < 0) {
+    if(dcsocks[0] < 0) {
+        exit(EXIT_FAILURE);
+    }
+
+    debug(DBG_LOG, "Opening Dreamcast/EU GC (50hz) port (9201) for "
+          "connections.\n");
+    dcsocks[1] = open_sock(9201);
+
+    if(dcsocks[1] < 0) {
         exit(EXIT_FAILURE);
     }
 
@@ -519,24 +534,17 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    debug(DBG_LOG, "Opening EU GC (50hz) port (9201) for connections.\n");
-    gcsocks[1] = open_sock(9201);
+    debug(DBG_LOG, "Opening JP GC (1.0) port (9000) for connections.\n");
+    gcsocks[1] = open_sock(9000);
 
     if(gcsocks[1] < 0) {
         exit(EXIT_FAILURE);
     }
 
-    debug(DBG_LOG, "Opening JP GC (1.0) port (9000) for connections.\n");
-    gcsocks[2] = open_sock(9000);
+    debug(DBG_LOG, "Opening JP GC (1.1) port (9001) for connections.\n");
+    gcsocks[2] = open_sock(9001);
 
     if(gcsocks[2] < 0) {
-        exit(EXIT_FAILURE);
-    }
-
-    debug(DBG_LOG, "Opening JP GC (1.1) port (9001) for connections.\n");
-    gcsocks[3] = open_sock(9001);
-
-    if(gcsocks[3] < 0) {
         exit(EXIT_FAILURE);
     }
 
@@ -548,12 +556,15 @@ int main(int argc, char *argv[]) {
     }
 
     /* Run the login server. */
-    run_server(dcsock, pcsock, gcsocks, websock);
+    run_server(dcsocks, pcsock, gcsocks, websock);
 
     /* Clean up. */
-    close(dcsock);
     close(pcsock);
     close(websock);
+
+    for(i = 0; i < NUM_DCSOCKS; ++i) {
+        close(dcsocks[i]);
+    }
 
     for(i = 0; i < NUM_GCSOCKS; ++i) {
         close(gcsocks[i]);

@@ -148,7 +148,7 @@ int read_from_client(login_client_t *c) {
     rbp = recvbuf;
 
     /* Make sure the client is actually a DC client, since it could be a PSOGC
-       client using the EU version @ 60Hz. */
+       client using the EU version. */
     if(c->type == CLIENT_TYPE_DC && !c->got_first && sz >= 4) {
         memcpy(&c->pkt, rbp, 4);
         CRYPT_CryptData(&c->client_cipher, &c->pkt, 4, 0);
