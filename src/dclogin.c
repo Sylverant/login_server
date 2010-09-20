@@ -41,6 +41,8 @@ static mini18n_t langs[CLIENT_LANG_COUNT];
 #define __(c, s) s
 #endif
 
+extern sylverant_dbconn_t conn;
+extern sylverant_config_t cfg;
 extern sylverant_quest_list_t qlist[CLIENT_TYPE_COUNT][CLIENT_LANG_COUNT];
 extern sylverant_limits_t *limits;
 
@@ -732,6 +734,52 @@ static int handle_char_data(login_client_t *c, dc_char_data_pkt *pkt) {
     return 0;
 }
 
+static int handle_info_req(login_client_t *c, dc_select_pkt *pkt) {
+    uint32_t menu_id = LE32(pkt->menu_id);
+    uint32_t item_id = LE32(pkt->item_id);
+    char str[256];
+    void *result;
+    char **row;
+
+    switch(menu_id) {
+        /* Ship */
+        case 0x00120000:
+            /* Nothing to say about offline quests for now */
+            if(item_id == 0xDEADBEEF) {
+                return send_info_reply(c, __(c, "\tENothing here."));
+            }
+
+            /* We should have a ship ID as the item_id at this point, so query
+               the db for the info we want. */
+            sprintf(str, "SELECT name, players, games FROM online_ships "
+                    "WHERE ship_id='%lu'", (unsigned long)item_id);
+
+            /* Query for what we're looking for */
+            if(sylverant_db_query(&conn, str)) {
+                return -1;
+            }
+
+            if(!(result = sylverant_db_result_store(&conn))) {
+                return -2;
+            }
+
+            /* If we don't have a row, then the ship is offline */
+            if(!(row = sylverant_db_result_fetch(result))) {
+                return send_info_reply(c, __(c, "\tE\tC4That ship is now\n"
+                                             "offline."));
+            }
+
+            /* Send the info reply */
+            sprintf(str, "%s\n\n%s %s\n%s %s", row[0], row[1], __(c, "Players"),
+                    row[2], __(c, "Games"));
+            return send_info_reply(c, str);
+
+        default:
+            /* Ignore any other info requests. */
+            return 0;
+    }
+}
+
 /* Process one login packet. */
 int process_dclogin_packet(login_client_t *c, void *pkt) {
     dc_pkt_hdr_t *dc = (dc_pkt_hdr_t *)pkt;
@@ -748,7 +796,7 @@ int process_dclogin_packet(login_client_t *c, void *pkt) {
         len = LE16(pc->pkt_len);
     }
 
-    debug(DBG_LOG, "DC/PC/GC: Receieved type 0x%02X\n", type);
+    debug(DBG_LOG, "DC/PC/GC: Received type 0x%02X\n", type);
 
     switch(type) {
         case LOGIN_90_TYPE:
@@ -786,8 +834,8 @@ int process_dclogin_packet(login_client_t *c, void *pkt) {
             return send_ship_list(c);
 
         case INFO_REQUEST_TYPE:
-            /* XXXX: Actually send something relevant! */
-            return send_info_reply(c, __(c, "\tENothing here."));
+            /* XXXX: Relevance, at last! */
+            return handle_info_req(c, (dc_select_pkt *)pkt);
 
         case MENU_SELECT_TYPE:
             /* XXXX: This might actually work, at least if there's a ship. */
