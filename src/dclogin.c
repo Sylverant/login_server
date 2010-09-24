@@ -45,6 +45,7 @@ extern sylverant_dbconn_t conn;
 extern sylverant_config_t cfg;
 extern sylverant_quest_list_t qlist[CLIENT_TYPE_COUNT][CLIENT_LANG_COUNT];
 extern sylverant_limits_t *limits;
+extern int ship_transfer(login_client_t *c, uint32_t shipid);
 
 static void print_packet(unsigned char *pkt, int len) {
     unsigned char *pos = pkt, *row = pkt;
@@ -673,21 +674,40 @@ static int handle_logind(login_client_t *c, dcv2_login_9d_pkt *pkt) {
 
 /* Handle a client's ship select packet. */
 static int handle_ship_select(login_client_t *c, dc_select_pkt *pkt) {
-    extern int ship_transfer(login_client_t *c, uint32_t shipid);
     sylverant_quest_list_t *l = &qlist[c->type][c->language_code];
+    uint32_t menu_id = LE32(pkt->menu_id);
+    uint32_t item_id = LE32(pkt->item_id);
 
-    /* Were we on a ship select or the offline quest menu? */
-    if(LE32(pkt->menu_id) == 0x00120000) {
-        /* Check if they picked the "Offline Quests" entry. */
-        if(LE32(pkt->item_id) == 0xDEADBEEF && l->cat_count == 1) {
-            return send_quest_list(c, &l->cats[0]);
-        }
-        else {
-            return ship_transfer(c, LE32(pkt->item_id));
-        }
-    }
-    else {
-        return send_quest(c, &l->cats[0].quests[LE32(pkt->item_id)]);
+    switch(menu_id & 0xFF) {
+        /* Ship */
+        case 0x01:
+            if(item_id == 0) {
+                /* A "Ship List" menu item */
+                return send_ship_list(c, (uint16_t)(menu_id >> 8));
+            }
+            else {
+                /* An actual ship */
+                return ship_transfer(c, item_id);
+            }
+
+        /* Quest */
+        case 0x04:
+            /* Make sure the item is valid */
+            if(item_id < l->cats[0].quest_count) {
+                return send_quest(c, &l->cats[0].quests[item_id]);
+            }
+            else {
+                return -1;
+            }
+
+        /* "Offline Quests" entry of the ship select */
+        case 0xFF:
+            if(l->cat_count == 1) {
+                return send_quest_list(c, &l->cats[0]);
+            }
+
+        default:
+            return -1;
     }
 }
 
@@ -741,11 +761,11 @@ static int handle_info_req(login_client_t *c, dc_select_pkt *pkt) {
     void *result;
     char **row;
 
-    switch(menu_id) {
+    switch(menu_id & 0xFF) {
         /* Ship */
-        case 0x00120000:
-            /* Nothing to say about offline quests for now */
-            if(item_id == 0xDEADBEEF) {
+        case 0x01:
+            /* If its a list, say nothing */
+            if(item_id == 0) {
                 return send_info_reply(c, __(c, "\tENothing here."));
             }
 
@@ -773,6 +793,12 @@ static int handle_info_req(login_client_t *c, dc_select_pkt *pkt) {
             sprintf(str, "%s\n\n%s %s\n%s %s", row[0], row[1], __(c, "Players"),
                     row[2], __(c, "Games"));
             return send_info_reply(c, str);
+
+        /* No ships entry */
+        case 0xEF:
+        /* Offline Quests entry */
+        case 0xFF:
+            return send_info_reply(c, __(c, "\tENothing here."));
 
         default:
             /* Ignore any other info requests. */
@@ -831,7 +857,7 @@ int process_dclogin_packet(login_client_t *c, void *pkt) {
         case SHIP_LIST_TYPE:
             /* XXXX: I don't have anything here either, but thought I'd be
                funny anyway. */
-            return send_ship_list(c);
+            return send_ship_list(c, 0x00);
 
         case INFO_REQUEST_TYPE:
             /* XXXX: Relevance, at last! */

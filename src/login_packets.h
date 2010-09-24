@@ -53,7 +53,7 @@ int send_redirect(login_client_t *c, in_addr_t ip, uint16_t port);
 int send_timestamp(login_client_t *c);
 
 /* Send the list of ships to the client. */
-int send_ship_list(login_client_t *c);
+int send_ship_list(login_client_t *c, uint16_t menu_code);
 
 /* Send a information reply packet to the client. */
 int send_info_reply(login_client_t *c, const char msg[]);

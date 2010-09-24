@@ -21,6 +21,7 @@
 #include <time.h>
 #include <errno.h>
 #include <iconv.h>
+#include <ctype.h>
 #include <sys/time.h>
 #include <sys/socket.h>
 
@@ -314,7 +315,7 @@ int send_timestamp(login_client_t *c) {
 }
 
 /* Send the list of ships to the client. */
-static int send_ship_list_dc(login_client_t *c) {
+static int send_ship_list_dc(login_client_t *c, uint16_t menu_code) {
     dc_ship_list_pkt *pkt = (dc_ship_list_pkt *)sendbuf;
     char no_ship_msg[] = "No Ships";
     char query[256];
@@ -323,6 +324,7 @@ static int send_ship_list_dc(login_client_t *c) {
     char **row;
     uint32_t ship_id, players;
     int i, len = 0x20, gm_only;
+    char tmp[3];
 
     /* Clear the base packet */
     memset(pkt, 0, sizeof(dc_ship_list_pkt));
@@ -340,7 +342,8 @@ static int send_ship_list_dc(login_client_t *c) {
     num_ships = 1;
 
     /* Get ready to query the database */
-    sprintf(query, "SELECT ship_id, name, players, gm_only FROM online_ships");
+    sprintf(query, "SELECT ship_id, name, players, gm_only FROM online_ships "
+            "WHERE menu_code='%hu' ORDER BY ship_id", menu_code);
 
     /* Query the database and see what we've got */
     if(sylverant_db_query(&conn, query)) {
@@ -366,7 +369,7 @@ static int send_ship_list_dc(login_client_t *c) {
             players = (uint32_t)strtoul(row[2], NULL, 0);
 
             /* Fill in what we have */
-            pkt->entries[num_ships].menu_id = LE32(0x00120000);
+            pkt->entries[num_ships].menu_id = LE32(0x00000001);
             pkt->entries[num_ships].item_id = LE32(ship_id);
             pkt->entries[num_ships].flags = LE16(0x0000);
 
@@ -381,12 +384,69 @@ static int send_ship_list_dc(login_client_t *c) {
 
     sylverant_db_result_free(result);
 
-    if(qlist[c->type][c->language_code].cats) {
+    /* Figure out any lists we need to allow to be seen */
+    sprintf(query, "SELECT DISTINCT menu_code FROM online_ships ORDER BY "
+            "menu_code");
+
+    /* Query the database and see what we've got */
+    if(sylverant_db_query(&conn, query)) {
+        i = -3;
+        goto out;
+    }
+
+    if((result = sylverant_db_result_store(&conn)) == NULL) {
+        i = -4;
+        goto out;
+    }
+
+    /* As long as we have some rows, go */
+    while((row = sylverant_db_result_fetch(result))) {
+        /* Grab info from the row */
+        ship_id = (uint16_t)strtoul(row[0], NULL, 0);
+
+        /* Skip the entry we're filling in now */
+        if(ship_id == menu_code) {
+            continue;
+        }
+
+        tmp[0] = (char)(ship_id);
+        tmp[1] = (char)(ship_id >> 8);
+        tmp[2] = '\0';
+
+        /* Make sure the values are in-bounds */
+        if((tmp[0] || tmp[1]) && (!isalpha(tmp[0]) || !isalpha(tmp[1]))) {
+            continue;
+        }
+
+        /* Clear out the ship information */
+        memset(&pkt->entries[num_ships], 0, 0x1C);
+
+        /* Fill in what we have */
+        pkt->entries[num_ships].menu_id = LE32((0x00000001 | (ship_id << 8)));
+        pkt->entries[num_ships].item_id = LE32(0x00000000);
+        pkt->entries[num_ships].flags = LE16(0x0000);
+
+        /* Create the name string */
+        if(tmp[0] && tmp[1]) {
+            sprintf(pkt->entries[num_ships].name, "\tC6%s Ship List", tmp);
+        }
+        else {
+            strcpy(pkt->entries[num_ships].name, "\tC6Main Ships");
+        }
+
+        /* We're done with this ship, increment the counter */
+        ++num_ships;
+        len += 0x1C;
+    }
+
+    sylverant_db_result_free(result);
+
+    if(qlist[c->type][c->language_code].cats && !menu_code) {
         /* Add the entry for Offline Quests. */
         memset(&pkt->entries[num_ships], 0, 0x1C);
     
         /* Fill in what we have */
-        pkt->entries[num_ships].menu_id = LE32(0x00120000);
+        pkt->entries[num_ships].menu_id = LE32(0x000000FF);
         pkt->entries[num_ships].item_id = LE32(0xDEADBEEF);
         pkt->entries[num_ships].flags = LE16(0x0000);
     
@@ -402,7 +462,7 @@ static int send_ship_list_dc(login_client_t *c) {
     if(num_ships == 1) {
         /* Clear out the ship information */
         memset(&pkt->entries[num_ships], 0, 0x1C);
-        pkt->entries[num_ships].menu_id = LE32(0xFFFFFFFF);
+        pkt->entries[num_ships].menu_id = LE32(0xDEADBEEF);
         pkt->entries[num_ships].item_id = LE32(0x00000000);
         pkt->entries[num_ships].flags = LE16(0x0000);
         strcpy(pkt->entries[num_ships].name, no_ship_msg);
@@ -423,10 +483,10 @@ out:
 }
 
 /* Send the list of ships to the client. */
-static int send_ship_list_pc(login_client_t *c) {
+static int send_ship_list_pc(login_client_t *c, uint16_t menu_code) {
     pc_ship_list_pkt *pkt = (pc_ship_list_pkt *)sendbuf;
     char no_ship_msg[] = "No Ships";
-    char query[256], tmp[18];
+    char query[256], tmp[18], tmp2[3];
     uint32_t num_ships = 0;
     void *result;
     char **row;
@@ -457,7 +517,8 @@ static int send_ship_list_pc(login_client_t *c) {
     num_ships = 1;
 
     /* Get ready to query the database */
-    sprintf(query, "SELECT ship_id, name, players, gm_only FROM online_ships");
+    sprintf(query, "SELECT ship_id, name, players, gm_only FROM online_ships "
+            "WHERE menu_code='%hu' ORDER BY ship_id", menu_code);
 
     /* Query the database and see what we've got */
     if(sylverant_db_query(&conn, query)) {
@@ -483,7 +544,7 @@ static int send_ship_list_pc(login_client_t *c) {
             players = (uint32_t)strtoul(row[2], NULL, 0);
 
             /* Fill in what we have */
-            pkt->entries[num_ships].menu_id = LE32(0x00120000);
+            pkt->entries[num_ships].menu_id = LE32(0x00000001);
             pkt->entries[num_ships].item_id = LE32(ship_id);
             pkt->entries[num_ships].flags = LE16(0x0000);
 
@@ -505,12 +566,76 @@ static int send_ship_list_pc(login_client_t *c) {
 
     sylverant_db_result_free(result);
 
-    if(qlist[c->type][c->language_code].cats) {
+    /* Figure out any lists we need to allow to be seen */
+    sprintf(query, "SELECT DISTINCT menu_code FROM online_ships ORDER BY "
+            "menu_code");
+
+    /* Query the database and see what we've got */
+    if(sylverant_db_query(&conn, query)) {
+        i = -3;
+        goto out;
+    }
+
+    if((result = sylverant_db_result_store(&conn)) == NULL) {
+        i = -4;
+        goto out;
+    }
+
+    /* As long as we have some rows, go */
+    while((row = sylverant_db_result_fetch(result))) {
+        /* Grab info from the row */
+        ship_id = (uint16_t)strtoul(row[0], NULL, 0);
+
+        /* Skip the entry we're filling in now */
+        if(ship_id == menu_code) {
+            continue;
+        }
+
+        tmp2[0] = (char)(ship_id);
+        tmp2[1] = (char)(ship_id >> 8);
+        tmp2[2] = '\0';
+
+        /* Make sure the values are in-bounds */
+        if((tmp2[0] || tmp2[1]) && (!isalpha(tmp2[0]) || !isalpha(tmp2[1]))) {
+            continue;
+        }
+
+        /* Clear out the ship information */
+        memset(&pkt->entries[num_ships], 0, 0x2C);
+
+        /* Fill in what we have */
+        pkt->entries[num_ships].menu_id = LE32((0x00000001 | (ship_id << 8)));
+        pkt->entries[num_ships].item_id = LE32(0x00000000);
+        pkt->entries[num_ships].flags = LE16(0x0000);
+
+        /* Create the name string (UTF-8) */
+        if(tmp2[0] && tmp2[1]) {
+            sprintf(tmp, "\tC6%s Ship List", tmp2);
+        }
+        else {
+            strcpy(tmp, "\tC6Main Ships");
+        }
+
+        /* And convert to UTF-16 */
+        in = strlen(tmp);
+        out = 0x22;
+        inptr = tmp;
+        outptr = (char *)pkt->entries[num_ships].name;
+        iconv(ic, &inptr, &in, &outptr, &out);
+
+        /* We're done with this ship, increment the counter */
+        ++num_ships;
+        len += 0x2C;
+    }
+
+    sylverant_db_result_free(result);
+
+    if(qlist[c->type][c->language_code].cats && !menu_code) {
         /* Add the entry for Offline Quests. */
         memset(&pkt->entries[num_ships], 0, 0x2C);
 
         /* Fill in what we have */
-        pkt->entries[num_ships].menu_id = LE32(0x00120000);
+        pkt->entries[num_ships].menu_id = LE32(0x000000FF);
         pkt->entries[num_ships].item_id = LE32(0xDEADBEEF);
         pkt->entries[num_ships].flags = LE16(0x0000);
 
@@ -527,7 +652,7 @@ static int send_ship_list_pc(login_client_t *c) {
     if(num_ships == 1) {
         /* Clear out the ship information */
         memset(&pkt->entries[num_ships], 0, 0x2C);
-        pkt->entries[num_ships].menu_id = LE32(0xFFFFFFFF);
+        pkt->entries[num_ships].menu_id = LE32(0xDEADBEEF);
         pkt->entries[num_ships].item_id = LE32(0x00000000);
         pkt->entries[num_ships].flags = LE16(0x0000);
 
@@ -556,15 +681,15 @@ out:
     return i;
 }
 
-int send_ship_list(login_client_t *c) {
+int send_ship_list(login_client_t *c, uint16_t menu_code) {
     /* Call the appropriate function */
     switch(c->type) {
         case CLIENT_TYPE_DC:
         case CLIENT_TYPE_GC:
-            return send_ship_list_dc(c);
+            return send_ship_list_dc(c, menu_code);
 
         case CLIENT_TYPE_PC:
-            return send_ship_list_pc(c);
+            return send_ship_list_pc(c, menu_code);
     }
 
     return -1;
