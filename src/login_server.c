@@ -493,7 +493,7 @@ int main(int argc, char *argv[]) {
     int dcsocks[NUM_DCSOCKS];
     int gcsocks[NUM_GCSOCKS];
 
-    chdir(SYLVERANT_DIRECTORY);
+    chdir(sylverant_directory);
 
     /* Parse the command line and read our configuration. */
     parse_command_line(argc, argv);
