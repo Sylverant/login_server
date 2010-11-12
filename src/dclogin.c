@@ -195,6 +195,34 @@ static int send_ban_msg(login_client_t *c, time_t until, const char *reason) {
     return send_large_msg(c, string);
 }
 
+/* Check if a user is already online. */
+static int is_gc_online(uint32_t gc) {
+    char query[256];
+    void *result;
+    char **row;
+    int rv = 0;
+
+    /* Fill in the query. */
+    sprintf(query, "SELECT guildcard FROM online_clients WHERE guildcard='%u'",
+            (unsigned int)gc);
+
+    /* If we can't query the database, fail. */
+    if(sylverant_db_query(&conn, query)) {
+        return -1;
+    }
+
+    /* Grab the results. */
+    result = sylverant_db_result_store(&conn);
+
+    /* If there is a result, then the user is already online. */
+    if((row = sylverant_db_result_fetch(result))) {
+        rv = 1;
+    }
+
+    sylverant_db_result_free(result);
+    return rv;
+}
+
 /* Handle a client's login request packet. */
 static int handle_login0(login_client_t *c, dc_login_90_pkt *pkt) {
     char query[256],  serial[32], access[32];
@@ -316,6 +344,19 @@ static int handle_login3(login_client_t *c, dc_login_93_pkt *pkt) {
         return -1;
     }
 
+    /* Make sure the guildcard isn't online already. */
+    banned = is_gc_online(gc);
+
+    if(banned == -1) {
+        send_large_msg(c, __(c, "\tEInternal Server Error.\n"
+                             "Please try again later."));
+        return -1;
+    }
+    else if(banned) {
+        send_large_msg(c, __(c, "\tEYour guildcard is already online.\n"));
+        return -1;
+    }
+
     /* Check if the user is a GM or not. */
     sprintf(query, "SELECT isgm FROM account_data NATURAL JOIN guildcards "
             "WHERE guildcard='%u'", gc);
@@ -430,6 +471,17 @@ static int handle_logina(login_client_t *c, dcv2_login_9a_pkt *pkt) {
         return -1;
     }
 
+    /* Make sure the guildcard isn't online already. */
+    banned = is_gc_online(gc);
+
+    if(banned == -1) {
+        return send_simple(c, LOGIN_9A_TYPE, LOGIN_9A_ERROR);
+    }
+    else if(banned) {
+        send_large_msg(c, __(c, "\tEYour guildcard is already online.\n"));
+        return -1;
+    }
+
     /* Check if the user is a GM or not. */
     sprintf(query, "SELECT isgm FROM account_data NATURAL JOIN guildcards "
             "WHERE guildcard='%u'", gc);
@@ -501,6 +553,17 @@ static int handle_gchlcheck(login_client_t *c, gc_hlcheck_pkt *pkt) {
         else if(banned) {
             send_ban_msg(c, banlen, query);
             return send_simple(c, LOGIN_9A_TYPE, LOGIN_DB_SUSPENDED);
+        }
+
+        /* Make sure the guildcard isn't online already. */
+        banned = is_gc_online(gc);
+
+        if(banned == -1) {
+            return send_simple(c, LOGIN_9A_TYPE, LOGIN_DB_CONN_ERROR);
+        }
+        else if(banned) {
+            send_large_msg(c, __(c, "\tEYour guildcard is already online.\n"));
+            return -1;
         }
 
         /* The client has at least registered, check the password...
