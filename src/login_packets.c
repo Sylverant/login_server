@@ -35,6 +35,8 @@
 extern sylverant_dbconn_t conn;
 extern sylverant_config_t cfg;
 extern sylverant_quest_list_t qlist[CLIENT_TYPE_COUNT][CLIENT_LANG_COUNT];
+extern in_addr_t local_addr;
+extern in_addr_t netmask;
 
 uint8_t sendbuf[65536];
 
@@ -265,6 +267,43 @@ int send_redirect(login_client_t *c, in_addr_t ip, uint16_t port) {
     }
 
     return -1;
+}
+
+/* Send a packet to clients connecting on the Gamecube port to sort out any PC
+   clients that might end up there. This must be sent before encryption is set
+   up! */
+int send_selective_redirect(login_client_t *c) {
+    dc_redirect_pkt *pkt = (dc_redirect_pkt *)sendbuf;
+    dc_pkt_hdr_t *hdr2 = (dc_pkt_hdr_t *)(sendbuf + 0x19);
+    in_addr_t addr;
+
+    /* Figure out the address to use */
+    /* Figure out what address to send the client. */
+    if(netmask && (c->ip_addr & netmask) == (local_addr & netmask)) {
+        addr = local_addr;
+    }
+    else {
+        addr = cfg.server_ip;
+    }
+
+    /* Wipe the packet */
+    memset(pkt, 0, 0xB0);
+
+    /* Fill in the redirect packet. PC users will parse this out as a type 0x19
+       (Redirect) with size 0xB0. GC/DC users would parse it out as a type 0xB0
+       (Ignored) with a size of 0x19. The second header takes care of the rest
+       of the 0xB0 size. */
+    pkt->hdr.pc.pkt_type = REDIRECT_TYPE;
+    pkt->hdr.pc.pkt_len = LE16(0x00B0);
+    pkt->ip_addr = addr;
+    pkt->port = LE16(9300);
+
+    /* Fill in the secondary header */
+    hdr2->pkt_type = 0xB0;
+    hdr2->pkt_len = LE16(0x0097);
+
+    /* Send it away */
+    return send_raw(c, 0xB0);
 }
 
 /* Send a timestamp packet to the given client. */

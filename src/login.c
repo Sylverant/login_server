@@ -71,6 +71,16 @@ login_client_t *create_connection(int sock, in_addr_t ip, int type) {
             break;
 
         case CLIENT_TYPE_GC:
+            /* Send a selective redirect packet to get any PSOPC users to
+               connect to the right port. We can safely do the rest here either
+               way, because PSOPC users should disconnect immediately on getting
+               this packet (and connect to port 9300 instead). */
+            if(send_selective_redirect(rv)) {
+                close(sock);
+                free(rv);
+                return NULL;
+            }
+
             /* Generate the encryption keys for the client and server. */
             rv->client_key = client_seed_dc = genrand_int32();
             rv->server_key = server_seed_dc = genrand_int32();

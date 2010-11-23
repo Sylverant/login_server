@@ -49,6 +49,11 @@ int send_dc_security(login_client_t *c, uint32_t gc, uint8_t *data,
 /* Send a redirect packet to the given client. */
 int send_redirect(login_client_t *c, in_addr_t ip, uint16_t port);
 
+/* Send a packet to clients connecting on the Gamecube port to sort out any PC
+   clients that might end up there. This must be sent before encryption is set
+   up! */
+int send_selective_redirect(login_client_t *c);
+
 /* Send a timestamp packet to the given client. */
 int send_timestamp(login_client_t *c);
 
