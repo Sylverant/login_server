@@ -853,8 +853,8 @@ static int handle_info_req(login_client_t *c, dc_select_pkt *pkt) {
             }
 
             /* Send the info reply */
-            sprintf(str, "%s\n\n%s %s\n%s %s", row[0], row[1], __(c, "Players"),
-                    row[2], __(c, "Games"));
+            sprintf(str, "%s\n\n%s %s\n%s %s", row[0], row[1],
+                    __(c, "Player(s)"), row[2], __(c, "Team(s)"));
             return send_info_reply(c, str);
 
         /* No ships entry */
