@@ -358,7 +358,7 @@ static int handle_login3(login_client_t *c, dc_login_93_pkt *pkt) {
     }
 
     /* Check if the user is a GM or not. */
-    sprintf(query, "SELECT isgm FROM account_data NATURAL JOIN guildcards "
+    sprintf(query, "SELECT privlevel FROM account_data NATURAL JOIN guildcards "
             "WHERE guildcard='%u'", gc);
 
     if(sylverant_db_query(&conn, query)) {
@@ -483,7 +483,7 @@ static int handle_logina(login_client_t *c, dcv2_login_9a_pkt *pkt) {
     }
 
     /* Check if the user is a GM or not. */
-    sprintf(query, "SELECT isgm FROM account_data NATURAL JOIN guildcards "
+    sprintf(query, "SELECT privlevel FROM account_data NATURAL JOIN guildcards "
             "WHERE guildcard='%u'", gc);
 
     if(sylverant_db_query(&conn, query)) {
@@ -584,8 +584,8 @@ static int handle_gchlcheck(login_client_t *c, gc_hlcheck_pkt *pkt) {
         account = (uint32_t)strtoul(row[0], NULL, 0);
         sylverant_db_result_free(result);
 
-        sprintf(query, "SELECT isgm FROM account_data WHERE account_id='%u'",
-                account);
+        sprintf(query, "SELECT privlevel FROM account_data WHERE "
+                "account_id='%u'", account);
 
         /* If we can't query the DB, fail. */
         if(sylverant_db_query(&conn, query)) {
@@ -949,6 +949,10 @@ int process_dclogin_packet(login_client_t *c, void *pkt) {
         case CHAR_DATA_TYPE:
             /* XXXX: Gee, I can be mean, can't I? */
             return handle_char_data(c, (dc_char_data_pkt *)pkt);
+
+        case GAME_COMMAND0_TYPE:
+            /* XXXX: Added so screenshots work on the ship list... */
+            return 0;
 
         default:
             print_packet((unsigned char *)pkt, len);
