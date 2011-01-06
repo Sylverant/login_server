@@ -1040,7 +1040,7 @@ int send_quest_list(login_client_t *c, sylverant_quest_category_t *l) {
     /* Call the appropriate function. */
     switch(c->type) {
         case CLIENT_TYPE_DC:
-            return send_dc_quest_list(c, l, SYLVERANT_QUEST_V1);
+            return send_dc_quest_list(c, l, c->version);
 
         case CLIENT_TYPE_PC:
             return send_pc_quest_list(c, l);
