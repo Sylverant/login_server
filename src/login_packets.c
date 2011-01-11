@@ -362,7 +362,7 @@ static int send_ship_list_dc(login_client_t *c, uint16_t menu_code) {
     void *result;
     char **row;
     uint32_t ship_id, players;
-    int i, len = 0x20, gm_only;
+    int i, len = 0x20, gm_only, flags;
     char tmp[3];
 
     /* Clear the base packet */
@@ -380,9 +380,23 @@ static int send_ship_list_dc(login_client_t *c, uint16_t menu_code) {
     pkt->entries[0].name[0x11] = 0x08;
     num_ships = 1;
 
+    /* Figure out what ships we might exclude by flags */
+    if(c->type == CLIENT_TYPE_GC) {
+        flags = 0x80;
+    }
+    else {
+        if(c->version == SYLVERANT_QUEST_V1) {
+            flags = 0x10;
+        }
+        else {
+            flags = 0x20;
+        }
+    }
+
     /* Get ready to query the database */
     sprintf(query, "SELECT ship_id, name, players, gm_only FROM online_ships "
-            "WHERE menu_code='%hu' ORDER BY ship_id", menu_code);
+            "WHERE menu_code='%hu' AND (flags & 0x%02x) = 0 ORDER BY ship_id",
+            menu_code, flags);
 
     /* Query the database and see what we've got */
     if(sylverant_db_query(&conn, query)) {
@@ -557,7 +571,8 @@ static int send_ship_list_pc(login_client_t *c, uint16_t menu_code) {
 
     /* Get ready to query the database */
     sprintf(query, "SELECT ship_id, name, players, gm_only FROM online_ships "
-            "WHERE menu_code='%hu' ORDER BY ship_id", menu_code);
+            "WHERE menu_code='%hu' AND (flags & 0x40) = 0 ORDER BY ship_id",
+            menu_code);
 
     /* Query the database and see what we've got */
     if(sylverant_db_query(&conn, query)) {
