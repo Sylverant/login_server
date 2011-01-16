@@ -43,8 +43,9 @@
 #include "login.h"
 #include "login_packets.h"
 
-#define NUM_DCSOCKS 2
-#define NUM_GCSOCKS 3
+#define NUM_DCSOCKS  2
+#define NUM_GCSOCKS  3
+#define NUM_EP3SOCKS 3
 
 /* Stuff read from the config files */
 sylverant_dbconn_t conn;
@@ -265,7 +266,8 @@ static int get_ip_info() {
 }
 
 static void run_server(int dcsocks[NUM_DCSOCKS], int pcsock,
-                       int gcsocks[NUM_GCSOCKS], int websock) {
+                       int gcsocks[NUM_GCSOCKS], int websock,
+                       int ep3socks[NUM_EP3SOCKS]) {
     fd_set readfds, writefds;
     struct timeval timeout;
     socklen_t len;
@@ -306,6 +308,11 @@ static void run_server(int dcsocks[NUM_DCSOCKS], int pcsock,
         for(j = 0; j < NUM_GCSOCKS; ++j) {
             FD_SET(gcsocks[j], &readfds);
             nfds = nfds > gcsocks[j] ? nfds : gcsocks[j];
+        }
+
+        for(j = 0; j < NUM_EP3SOCKS; ++j) {
+            FD_SET(ep3socks[j], &readfds);
+            nfds = nfds > ep3socks[j] ? nfds : ep3socks[j];
         }
 
         FD_SET(pcsock, &readfds);
@@ -371,6 +378,28 @@ static void run_server(int dcsocks[NUM_DCSOCKS], int pcsock,
 
                     if(create_connection(asock, addr.sin_addr.s_addr,
                                          CLIENT_TYPE_GC) == NULL) {
+                        close(asock);
+                    }
+                    else {
+                        ++client_count;
+                    }
+                }
+            }
+
+            for(j = 0; j < NUM_EP3SOCKS; ++j) {
+                if(FD_ISSET(ep3socks[j], &readfds)) {
+                    len = sizeof(struct sockaddr_in);
+
+                    if((asock = accept(ep3socks[j], (struct sockaddr *)&addr,
+                                       &len)) < 0) {
+                        perror("accept");
+                    }
+
+                    debug(DBG_LOG, "Accepted Episode 3 connection from %s\n",
+                          inet_ntoa(addr.sin_addr));
+
+                    if(create_connection(asock, addr.sin_addr.s_addr,
+                                         CLIENT_TYPE_EP3) == NULL) {
                         close(asock);
                     }
                     else {
@@ -492,6 +521,7 @@ int main(int argc, char *argv[]) {
     int pcsock, websock, i, j;
     int dcsocks[NUM_DCSOCKS];
     int gcsocks[NUM_GCSOCKS];
+    int ep3socks[NUM_EP3SOCKS];
 
     chdir(sylverant_directory);
 
@@ -548,6 +578,27 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
+    debug(DBG_LOG, "Opening US GC Ep3 port (9103) for connections.\n");
+    ep3socks[0] = open_sock(9103);
+
+    if(ep3socks[0] < 0) {
+        exit(EXIT_FAILURE);
+    }
+
+    debug(DBG_LOG, "Opening EU GC Ep3 port (9203) for connections.\n");
+    ep3socks[1] = open_sock(9203);
+
+    if(ep3socks[1] < 0) {
+        exit(EXIT_FAILURE);
+    }
+
+    debug(DBG_LOG, "Opening JP GC Ep3 port (9003) for connections.\n");
+    ep3socks[2] = open_sock(9003);
+    
+    if(ep3socks[2] < 0) {
+        exit(EXIT_FAILURE);
+    }
+
     debug(DBG_LOG, "Opening Web port (10003) for connections.\n");
     websock = open_sock(10003);
 
@@ -556,7 +607,7 @@ int main(int argc, char *argv[]) {
     }
 
     /* Run the login server. */
-    run_server(dcsocks, pcsock, gcsocks, websock);
+    run_server(dcsocks, pcsock, gcsocks, websock, ep3socks);
 
     /* Clean up. */
     close(pcsock);
@@ -568,6 +619,10 @@ int main(int argc, char *argv[]) {
 
     for(i = 0; i < NUM_GCSOCKS; ++i) {
         close(gcsocks[i]);
+    }
+
+    for(i = 0; i < NUM_EP3SOCKS; ++i) {
+        close(ep3socks[i]);
     }
 
     sylverant_db_close(&conn);

@@ -113,7 +113,8 @@ int send_dc_welcome(login_client_t *c, uint32_t svect, uint32_t cvect) {
     memset(pkt, 0, sizeof(dc_welcome_pkt));
 
     /* Fill in the header */
-    if(c->type == CLIENT_TYPE_DC || c->type == CLIENT_TYPE_GC) {
+    if(c->type == CLIENT_TYPE_DC || c->type == CLIENT_TYPE_GC ||
+       c->type == CLIENT_TYPE_EP3) {
         pkt->hdr.dc.pkt_len = LE16(DC_WELCOME_LENGTH);
         pkt->hdr.dc.pkt_type = LOGIN_WELCOME_TYPE;
     }
@@ -141,7 +142,8 @@ static int send_large_msg_dc(login_client_t *c, const char msg[]) {
     ICONV_CONST char *inptr;
     char *outptr;
 
-    if(c->type == CLIENT_TYPE_DC || c->type == CLIENT_TYPE_GC) {
+    if(c->type == CLIENT_TYPE_DC || c->type == CLIENT_TYPE_GC ||
+       c->type == CLIENT_TYPE_EP3) {
         if(msg[1] == 'J') {
             ic = iconv_open("SHIFT_JIS", "UTF-8");
         }
@@ -196,6 +198,7 @@ int send_large_msg(login_client_t *c, const char msg[]) {
         case CLIENT_TYPE_DC:
         case CLIENT_TYPE_GC:
         case CLIENT_TYPE_PC:
+        case CLIENT_TYPE_EP3:
             return send_large_msg_dc(c, msg);
     }
 
@@ -211,7 +214,8 @@ int send_dc_security(login_client_t *c, uint32_t gc, uint8_t *data,
     memset(pkt, 0, sizeof(dc_security_pkt));
 
     /* Fill in the header */
-    if(c->type == CLIENT_TYPE_DC || c->type == CLIENT_TYPE_GC) {
+    if(c->type == CLIENT_TYPE_DC || c->type == CLIENT_TYPE_GC ||
+       c->type == CLIENT_TYPE_EP3) {
         pkt->hdr.dc.pkt_type = SECURITY_TYPE;
         pkt->hdr.dc.pkt_len = LE16((0x0C + data_len));
     }
@@ -240,7 +244,8 @@ static int send_redirect_dc(login_client_t *c, in_addr_t ip, uint16_t port) {
     memset(pkt, 0, DC_REDIRECT_LENGTH);
 
     /* Fill in the header */
-    if(c->type == CLIENT_TYPE_DC || c->type == CLIENT_TYPE_GC) {
+    if(c->type == CLIENT_TYPE_DC || c->type == CLIENT_TYPE_GC ||
+       c->type == CLIENT_TYPE_EP3) {
         pkt->hdr.dc.pkt_type = REDIRECT_TYPE;
         pkt->hdr.dc.pkt_len = LE16(DC_REDIRECT_LENGTH);
     }
@@ -263,6 +268,7 @@ int send_redirect(login_client_t *c, in_addr_t ip, uint16_t port) {
         case CLIENT_TYPE_DC:
         case CLIENT_TYPE_PC:
         case CLIENT_TYPE_GC:
+        case CLIENT_TYPE_EP3:
             return send_redirect_dc(c, ip, port);
     }
 
@@ -316,7 +322,8 @@ static int send_timestamp_dc(login_client_t *c) {
     memset(pkt, 0, DC_TIMESTAMP_LENGTH);
 
     /* Fill in the header */
-    if(c->type == CLIENT_TYPE_DC || c->type == CLIENT_TYPE_GC) {
+    if(c->type == CLIENT_TYPE_DC || c->type == CLIENT_TYPE_GC ||
+       c->type == CLIENT_TYPE_EP3) {
         pkt->hdr.dc.pkt_type = TIMESTAMP_TYPE;
         pkt->hdr.dc.pkt_len = LE16(DC_TIMESTAMP_LENGTH);
     }
@@ -347,6 +354,7 @@ int send_timestamp(login_client_t *c) {
         case CLIENT_TYPE_DC:
         case CLIENT_TYPE_PC:
         case CLIENT_TYPE_GC:
+        case CLIENT_TYPE_EP3:
             return send_timestamp_dc(c);
     }
 
@@ -740,6 +748,7 @@ int send_ship_list(login_client_t *c, uint16_t menu_code) {
     switch(c->type) {
         case CLIENT_TYPE_DC:
         case CLIENT_TYPE_GC:
+        case CLIENT_TYPE_EP3:
             return send_ship_list_dc(c, menu_code);
 
         case CLIENT_TYPE_PC:
@@ -756,7 +765,8 @@ static int send_info_reply_dc(login_client_t *c, const char msg[]) {
     ICONV_CONST char *inptr;
     char *outptr;
 
-    if(c->type == CLIENT_TYPE_DC || c->type == CLIENT_TYPE_GC) {
+    if(c->type == CLIENT_TYPE_DC || c->type == CLIENT_TYPE_GC ||
+       c->type == CLIENT_TYPE_EP3) {
         if(msg[1] == 'J') {
             ic = iconv_open("SHIFT_JIS", "UTF-8");
         }
@@ -794,7 +804,8 @@ static int send_info_reply_dc(login_client_t *c, const char msg[]) {
     }
 
     /* Fill in the header */
-    if(c->type == CLIENT_TYPE_DC || c->type == CLIENT_TYPE_GC) {
+    if(c->type == CLIENT_TYPE_DC || c->type == CLIENT_TYPE_GC ||
+       c->type == CLIENT_TYPE_EP3) {
         pkt->hdr.dc.pkt_type = INFO_REPLY_TYPE;
         pkt->hdr.dc.flags = 0;
         pkt->hdr.dc.pkt_len = LE16(out);
@@ -815,6 +826,7 @@ int send_info_reply(login_client_t *c, const char msg[]) {
         case CLIENT_TYPE_DC:
         case CLIENT_TYPE_PC:
         case CLIENT_TYPE_GC:
+        case CLIENT_TYPE_EP3:
             return send_info_reply_dc(c, msg);
     }
 
@@ -851,6 +863,7 @@ int send_simple(login_client_t *c, int type, int flags) {
     switch(c->type) {
         case CLIENT_TYPE_DC:
         case CLIENT_TYPE_GC:
+        case CLIENT_TYPE_EP3:
             return send_simple_dc(c, type, flags);
 
         case CLIENT_TYPE_PC:
@@ -1061,6 +1074,7 @@ int send_quest_list(login_client_t *c, sylverant_quest_category_t *l) {
             return send_pc_quest_list(c, l);
 
         case CLIENT_TYPE_GC:
+        case CLIENT_TYPE_EP3:
             return send_gc_quest_list(c, l);
     }
 
@@ -1120,4 +1134,62 @@ int send_quest(login_client_t *c, sylverant_quest_t *q) {
     /* We're finished. */
     fclose(fp);
     return 0;
+}
+
+/* Send an Episode 3 rank update to a client. */
+int send_ep3_rank_update(login_client_t *c) {
+    ep3_rank_update_pkt *pkt = (ep3_rank_update_pkt *)sendbuf;
+
+    /* XXXX: Need to actually do something with this in the future */
+    memset(pkt, 0, sizeof(ep3_rank_update_pkt));
+    pkt->hdr.pkt_type = EP3_RANK_UPDATE_TYPE;
+    pkt->hdr.pkt_len = LE16(0x0020);
+    pkt->meseta = LE32(0x00FFFFFF);
+    pkt->max_meseta = LE32(0x00FFFFFF);
+    pkt->jukebox = LE32(0xFFFFFFFF);
+
+    return crypt_send(c, 0x0020);
+}
+
+/* Send the Episode 3 card list to a client. */
+int send_ep3_card_update(login_client_t *c) {
+    ep3_card_update_pkt *pkt = (ep3_card_update_pkt *)sendbuf;
+    FILE *fp;
+    long size;
+    uint16_t pkt_len;
+
+    /* Make sure we're actually dealing with Episode 3 */
+    if(c->type != CLIENT_TYPE_EP3) {
+        return -1;
+    }
+
+    /* Grab the card list */
+    fp = fopen("ep3/cardupdate.mnr", "rb");
+    if(!fp) {
+        return -1;
+    }
+
+    /* Figure out how big the file is */
+    fseek(fp, 0, SEEK_END);
+    size = ftell(fp);
+    fseek(fp, 0, SEEK_SET);
+
+    /* Make sure the size is sane... */
+    if(size > 0x8000) {
+        return -1;
+    }
+
+    /* Not sure why this size is used, but for now we'll go with it (borrowed
+       from Fuzziqer's newserv) */
+    pkt_len = (13 + size) & 0xFFFC;
+
+    /* Fill in the packet */
+    pkt->hdr.pkt_len = LE16(pkt_len);
+    pkt->hdr.pkt_type = EP3_CARD_UPDATE_TYPE;
+    pkt->hdr.flags = 0;
+    pkt->size = LE32(size);
+    fread(pkt->data, 1, size, fp);
+
+    /* Send it away */
+    return crypt_send(c, pkt_len);
 }

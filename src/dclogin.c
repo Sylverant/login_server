@@ -1,6 +1,6 @@
 /*
     Sylverant Login Server
-    Copyright (C) 2009, 2010 Lawrence Sebald
+    Copyright (C) 2009, 2010, 2011 Lawrence Sebald
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License version 3
@@ -876,7 +876,8 @@ int process_dclogin_packet(login_client_t *c, void *pkt) {
     uint8_t type;
     uint16_t len;
 
-    if(c->type == CLIENT_TYPE_DC || c->type == CLIENT_TYPE_GC) {
+    if(c->type == CLIENT_TYPE_DC || c->type == CLIENT_TYPE_GC ||
+       c->type == CLIENT_TYPE_EP3) {
         type = dc->pkt_type;
         len = LE16(dc->pkt_len);
     }
@@ -917,6 +918,17 @@ int process_dclogin_packet(login_client_t *c, void *pkt) {
             return send_timestamp(c);
 
         case SHIP_LIST_REQ_TYPE:
+            /* XXXX: We'll fall through the bottom of this... */
+            if(c->type == CLIENT_TYPE_EP3) {
+                if(send_ep3_rank_update(c)) {
+                    return -1;
+                }
+
+                if(send_ep3_card_update(c)) {
+                    return -1;
+                }
+            }
+
         case SHIP_LIST_TYPE:
             /* XXXX: I don't have anything here either, but thought I'd be
                funny anyway. */
@@ -952,6 +964,11 @@ int process_dclogin_packet(login_client_t *c, void *pkt) {
 
         case GAME_COMMAND0_TYPE:
             /* XXXX: Added so screenshots work on the ship list... */
+            return 0;
+
+        case EP3_RANK_UPDATE_TYPE:
+        case EP3_CARD_UPDATE_TYPE:
+            /* XXXX: I have no idea what to do with these... */
             return 0;
 
         default:

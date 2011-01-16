@@ -1,6 +1,6 @@
 /*
     Sylverant Login Server
-    Copyright (C) 2009, 2010 Lawrence Sebald
+    Copyright (C) 2009, 2010, 2011 Lawrence Sebald
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License version 3
@@ -71,5 +71,11 @@ int send_quest_list(login_client_t *c, sylverant_quest_category_t *l);
 
 /* Send a quest to a client. */
 int send_quest(login_client_t *c, sylverant_quest_t *q);
+
+/* Send an Episode 3 rank update to a client. */
+int send_ep3_rank_update(login_client_t *c);
+
+/* Send the Episode 3 card list to a client. */
+int send_ep3_card_update(login_client_t *c);
 
 #endif /* !LOGIN_PACKETS_H */
