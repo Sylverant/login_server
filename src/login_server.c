@@ -159,12 +159,12 @@ int ship_transfer(login_client_t *c, uint32_t shipid) {
     char query[256];
     void *result;
     char **row;
-    in_addr_t ip, int_ip;
+    in_addr_t ip;
     uint16_t port;
 
     /* Query the database for the ship in question */
-    sprintf(query, "SELECT ip, port, int_ip FROM online_ships WHERE "
-            "ship_id='%lu'", (unsigned long)shipid);
+    sprintf(query, "SELECT ip, port FROM online_ships WHERE ship_id='%lu'",
+            (unsigned long)shipid);
 
     if(sylverant_db_query(&conn, query)) {
         return -1;
@@ -181,25 +181,6 @@ int ship_transfer(login_client_t *c, uint32_t shipid) {
     /* Grab the data from the row */
     ip = htonl((in_addr_t)strtoul(row[0], NULL, 0));
     port = (uint16_t)strtoul(row[1], NULL, 0);
-    int_ip = htonl((in_addr_t)strtoul(row[2], NULL, 0));
-
-    /* Figure out which address we need to send the client. */
-    if(c->ip_addr == ip) {
-        /* The client and the ship are connecting from the same
-           address, this one is obvious. */
-        ip = int_ip;
-    }
-    else if(ip == cfg.override_ip &&
-            (c->ip_addr & netmask) == (local_addr & netmask)) {
-        /* The destination and the source are on the same
-           network, and the client is on the same network as the
-           source, thus the client must be on the same network
-           as the destination, send the internal address. */
-        ip = int_ip;
-    }
-
-    /* They should be on different networks if we get here,
-       send the external IP. */
 
     /* If the client is on the PC/GC version, connect to the PC/GC version port,
        rather than the one for the DC version. */
