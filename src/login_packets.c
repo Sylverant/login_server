@@ -35,8 +35,6 @@
 extern sylverant_dbconn_t conn;
 extern sylverant_config_t cfg;
 extern sylverant_quest_list_t qlist[CLIENT_TYPE_COUNT][CLIENT_LANG_COUNT];
-extern in_addr_t local_addr;
-extern in_addr_t netmask;
 
 uint8_t sendbuf[65536];
 
@@ -281,16 +279,7 @@ int send_redirect(login_client_t *c, in_addr_t ip, uint16_t port) {
 int send_selective_redirect(login_client_t *c) {
     dc_redirect_pkt *pkt = (dc_redirect_pkt *)sendbuf;
     dc_pkt_hdr_t *hdr2 = (dc_pkt_hdr_t *)(sendbuf + 0x19);
-    in_addr_t addr;
-
-    /* Figure out the address to use */
-    /* Figure out what address to send the client. */
-    if(netmask && (c->ip_addr & netmask) == (local_addr & netmask)) {
-        addr = local_addr;
-    }
-    else {
-        addr = cfg.server_ip;
-    }
+    in_addr_t addr = cfg.server_ip;
 
     /* Wipe the packet */
     memset(pkt, 0, 0xB0);
