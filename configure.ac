@@ -34,11 +34,15 @@ AC_CONFIG_SRCDIR([src/dclogin.c])
 AC_PROG_CC
 
 # Checks for libraries.
+PKG_CHECK_MODULES([libxml2], [libxml-2.0 >= 2.7])
+CFLAGS="$CFLAGS $libxml2_CFLAGS"
+LIBS="$LIBS $libxml2_LIBS"
+
 MYSQL_CLIENT()
 
 MYSQL_LIBS="`mysql_config --libs`"
+
 AC_SUBST(MYSQL_LIBS)
-AC_CHECK_LIB([expat], [XML_ParserCreate], , AC_MSG_ERROR([libexpat is required!]))
 AC_CHECK_LIB([sylverant], [sylverant_read_config], , AC_MSG_ERROR([libsylverant is required!]))
 AC_CHECK_LIB([mini18n], [mini18n_get], , AC_MSG_WARN([Internationalization support requires mini18n]))
 
