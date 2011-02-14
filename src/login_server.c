@@ -54,6 +54,8 @@ sylverant_limits_t *limits = NULL;
 
 sylverant_quest_list_t qlist[CLIENT_TYPE_COUNT][CLIENT_LANG_COUNT];
 
+static int dont_daemonize = 0;
+
 /* Print information about this program to stdout. */
 static void print_program_info() {
     printf("Sylverant Login Server version %s\n", VERSION);
@@ -78,6 +80,7 @@ static void print_help(const char *bin) {
            "--verbose       Log many messages that might help debug a problem\n"
            "--quiet         Only log warning and error messages\n"
            "--reallyquiet   Only log error messages\n"
+           "--nodaemon      Don't daemonize\n"
            "--help          Print this help and exit\n\n"
            "Note that if more than one verbosity level is specified, the last\n"
            "one specified will be used. The default is --verbose.\n", bin);
@@ -90,7 +93,7 @@ static void parse_command_line(int argc, char *argv[]) {
     for(i = 1; i < argc; ++i) {
         if(!strcmp(argv[i], "--version")) {
             print_program_info();
-            exit(0);
+            exit(EXIT_SUCCESS);
         }
         else if(!strcmp(argv[i], "--verbose")) {
             debug_set_threshold(DBG_LOG);
@@ -101,14 +104,17 @@ static void parse_command_line(int argc, char *argv[]) {
         else if(!strcmp(argv[i], "--reallyquiet")) {
             debug_set_threshold(DBG_ERROR);
         }
+        else if(!strcmp(argv[i], "--nodaemon")) {
+            dont_daemonize = 1;
+        }
         else if(!strcmp(argv[i], "--help")) {
             print_help(argv[0]);
-            exit(0);
+            exit(EXIT_SUCCESS);
         }
         else {
             printf("Illegal command line argument: %s\n", argv[i]);
             print_help(argv[0]);
-            exit(1);
+            exit(EXIT_FAILURE);
         }
     }
 }
@@ -120,7 +126,7 @@ static void load_config() {
 
     if(sylverant_read_config(&cfg)) {
         debug(DBG_ERROR, "Cannot load configuration!\n");
-        exit(1);
+        exit(EXIT_FAILURE);
     }
 
     /* Attempt to read each quests file... */
@@ -148,7 +154,7 @@ static void load_config() {
 
     if(sylverant_db_open(&cfg.dbcfg, &conn)) {
         debug(DBG_ERROR, "Can't connect to the database\n");
-        exit(1);
+        exit(EXIT_FAILURE);
     }
 }
 
@@ -404,7 +410,7 @@ static void run_server(int dcsocks[NUM_DCSOCKS], int pcsock,
 }
 
 static int open_sock(uint16_t port) {
-    int sock = -1;
+    int sock = -1, val;
     struct sockaddr_in addr;
 
     /* Create the socket and listen for connections. */
@@ -414,6 +420,15 @@ static int open_sock(uint16_t port) {
         perror("socket");
         sylverant_db_close(&conn);
         return -1;
+    }
+
+    /* Set SO_REUSEADDR so we don't run into issues when we kill the login
+       server bring it back up quickly... */
+    val = 1;
+    if(setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &val, sizeof(int))) {
+        perror("setsockopt");
+        /* We can ignore this error, pretty much... its just a convenience thing
+           anyway... */
     }
 
     addr.sin_family = AF_INET;
@@ -438,6 +453,20 @@ static int open_sock(uint16_t port) {
     return sock;
 }
 
+static void open_log() {
+    FILE *dbgfp;
+
+    dbgfp = fopen("logs/login_debug.log", "a");
+
+    if(!dbgfp) {
+        debug(DBG_ERROR, "Cannot open log file\n");
+        perror("fopen");
+        exit(EXIT_FAILURE);
+    }
+
+    debug_set_file(dbgfp);
+}
+
 int main(int argc, char *argv[]) {
     int pcsock, websock, i, j;
     int dcsocks[NUM_DCSOCKS];
@@ -445,6 +474,17 @@ int main(int argc, char *argv[]) {
     int ep3socks[NUM_EP3SOCKS];
 
     chdir(sylverant_directory);
+
+    /* If we're supposed to daemonize, do it now. */
+    if(!dont_daemonize) {
+        open_log();
+
+        if(daemon(1, 0)) {
+            debug(DBG_ERROR, "Cannot daemonize\n");
+            perror("daemon");
+            exit(EXIT_FAILURE);
+        }
+    }
 
     /* Parse the command line and read our configuration. */
     parse_command_line(argc, argv);
