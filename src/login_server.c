@@ -475,6 +475,8 @@ int main(int argc, char *argv[]) {
 
     chdir(sylverant_directory);
 
+    parse_command_line(argc, argv);
+
     /* If we're supposed to daemonize, do it now. */
     if(!dont_daemonize) {
         open_log();
@@ -486,8 +488,6 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    /* Parse the command line and read our configuration. */
-    parse_command_line(argc, argv);
     load_config();
 
     /* Init mini18n if we have it. */
