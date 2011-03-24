@@ -27,6 +27,14 @@
 #include "login.h"
 #include "packets.h"
 
+#define MENU_ID_INITIAL         0x00000000
+#define MENU_ID_SHIP            0x00000001
+#define MENU_ID_QUEST           0x00000004
+#define MENU_ID_DATABASE        0x00040000
+
+#define ITEM_ID_INIT_SHIP       0x00000000
+#define ITEM_ID_INIT_DOWNLOAD   0x00000001
+
 /* This must be placed into the copyright field in the BB welcome packet. */
 const static char login_bb_welcome_copyright[] =
     "Phantasy Star Online Blue Burst Game Server. "
@@ -56,6 +64,10 @@ int send_selective_redirect(login_client_t *c);
 
 /* Send a timestamp packet to the given client. */
 int send_timestamp(login_client_t *c);
+
+/* Send the initial menu to clients, with the options of "Ship Select" and
+   "Download". */
+int send_initial_menu(login_client_t *c);
 
 /* Send the list of ships to the client. */
 int send_ship_list(login_client_t *c, uint16_t menu_code);

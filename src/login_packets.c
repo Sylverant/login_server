@@ -350,6 +350,91 @@ int send_timestamp(login_client_t *c) {
     return -1;
 }
 
+/* Send the initial menu to clients, with the options of "Ship Select" and
+   "Download". */
+static int send_initial_menu_dc(login_client_t *c) {
+    dc_ship_list_pkt *pkt = (dc_ship_list_pkt *)sendbuf;
+
+    /* Clear the base packet */
+    memset(pkt, 0, 0x0058);
+
+    /* Fill in some basic stuff */
+    pkt->hdr.pkt_type = BLOCK_LIST_TYPE;
+    pkt->hdr.flags = 0x02;
+    pkt->hdr.pkt_len = LE16(0x0058);
+
+    /* Fill in the "DATABASE/US" entry */
+    pkt->entries[0].menu_id = LE32(MENU_ID_DATABASE);
+    pkt->entries[0].item_id = 0;
+    pkt->entries[0].flags = LE16(0x0004);
+    strcpy(pkt->entries[0].name, "DATABASE/US");
+    pkt->entries[0].name[0x11] = 0x08;
+
+    /* Fill in the "Ship Select" entry */
+    pkt->entries[1].menu_id = LE32(MENU_ID_INITIAL);
+    pkt->entries[1].item_id = LE32(ITEM_ID_INIT_SHIP);
+    pkt->entries[1].flags = LE16(0x0004);
+    strcpy(pkt->entries[1].name, "Ship Select");
+
+    /* Fill in the "Download" entry */
+    pkt->entries[2].menu_id = LE32(MENU_ID_INITIAL);
+    pkt->entries[2].item_id = LE32(ITEM_ID_INIT_DOWNLOAD);
+    pkt->entries[2].flags = LE16(0x0F04);
+    strcpy(pkt->entries[2].name, "Download");
+
+    /* Send the packet away */
+    return crypt_send(c, 0x58);
+}
+
+static int send_initial_menu_pc(login_client_t *c) {
+    pc_ship_list_pkt *pkt = (pc_ship_list_pkt *)sendbuf;
+
+    /* Clear the base packet */
+    memset(pkt, 0, 0x0088);
+
+    /* Fill in some basic stuff */
+    pkt->hdr.pkt_type = BLOCK_LIST_TYPE;
+    pkt->hdr.flags = 0x02;
+    pkt->hdr.pkt_len = LE16(0x0088);
+
+    /* Fill in the "DATABASE/US" entry */
+    pkt->entries[0].menu_id = LE32(MENU_ID_DATABASE);
+    pkt->entries[0].item_id = 0;
+    pkt->entries[0].flags = LE16(0x0004);
+    memcpy(pkt->entries[0].name, "D\0A\0T\0A\0B\0A\0S\0E\0/\0U\0S\0", 22);
+    pkt->entries[0].name[0x11] = 0x08;
+
+    /* Fill in the "Ship Select" entry */
+    pkt->entries[1].menu_id = LE32(MENU_ID_INITIAL);
+    pkt->entries[1].item_id = LE32(ITEM_ID_INIT_SHIP);
+    pkt->entries[1].flags = LE16(0x0004);
+    memcpy(pkt->entries[1].name, "S\0h\0i\0p\0 \0S\0e\0l\0e\0c\0t\0", 22);
+
+    /* Fill in the "Download" entry */
+    pkt->entries[2].menu_id = LE32(MENU_ID_INITIAL);
+    pkt->entries[2].item_id = LE32(ITEM_ID_INIT_DOWNLOAD);
+    pkt->entries[2].flags = LE16(0x0F04);
+    memcpy(pkt->entries[2].name, "D\0o\0w\0n\0l\0o\0a\0d\0", 16);
+
+    /* Send the packet away */
+    return crypt_send(c, 0x88);
+}
+
+int send_initial_menu(login_client_t *c) {
+    /* Call the appropriate function */
+    switch(c->type) {
+        case CLIENT_TYPE_DC:
+        case CLIENT_TYPE_GC:
+        case CLIENT_TYPE_EP3:
+            return send_initial_menu_dc(c);
+
+        case CLIENT_TYPE_PC:
+            return send_initial_menu_pc(c);
+    }
+
+    return -1;
+}
+
 /* Send the list of ships to the client. */
 static int send_ship_list_dc(login_client_t *c, uint16_t menu_code) {
     dc_ship_list_pkt *pkt = (dc_ship_list_pkt *)sendbuf;
@@ -490,23 +575,6 @@ static int send_ship_list_dc(login_client_t *c, uint16_t menu_code) {
     }
 
     sylverant_db_result_free(result);
-
-    if(qlist[c->type][c->language_code].cats && !menu_code) {
-        /* Add the entry for Offline Quests. */
-        memset(&pkt->entries[num_ships], 0, 0x1C);
-    
-        /* Fill in what we have */
-        pkt->entries[num_ships].menu_id = LE32(0x000000FF);
-        pkt->entries[num_ships].item_id = LE32(0xDEADBEEF);
-        pkt->entries[num_ships].flags = LE16(0x0000);
-    
-        /* Create the name string */
-        strcpy(pkt->entries[num_ships].name, "Offline Quests");
-    
-        /* We're done with this "ship", increment the counter */
-        ++num_ships;
-        len += 0x1C;
-    }
 
     /* Make sure we have at least one ship... */
     if(num_ships == 1) {
@@ -680,24 +748,6 @@ static int send_ship_list_pc(login_client_t *c, uint16_t menu_code) {
     }
 
     sylverant_db_result_free(result);
-
-    if(qlist[c->type][c->language_code].cats && !menu_code) {
-        /* Add the entry for Offline Quests. */
-        memset(&pkt->entries[num_ships], 0, 0x2C);
-
-        /* Fill in what we have */
-        pkt->entries[num_ships].menu_id = LE32(0x000000FF);
-        pkt->entries[num_ships].item_id = LE32(0xDEADBEEF);
-        pkt->entries[num_ships].flags = LE16(0x0000);
-
-        /* Create the name string */
-        memcpy(pkt->entries[num_ships].name,
-               "O\0f\0f\0l\0i\0n\0e\0 \0Q\0u\0e\0s\0t\0s\0", 28);
-
-        /* We're done with this "ship", increment the counter */
-        ++num_ships;
-        len += 0x2C;
-    }
 
     /* Make sure we have at least one ship... */
     if(num_ships == 1) {

@@ -740,8 +740,23 @@ static int handle_ship_select(login_client_t *c, dc_select_pkt *pkt) {
     sylverant_quest_list_t *l = &qlist[c->type][c->language_code];
     uint32_t menu_id = LE32(pkt->menu_id);
     uint32_t item_id = LE32(pkt->item_id);
+    int rv;
 
     switch(menu_id & 0xFF) {
+        /* Initial menu */
+        case 0x00:
+            if(item_id == ITEM_ID_INIT_SHIP) {
+                /* Ship Select */
+                return send_ship_list(c, 0);
+            }
+            else if(item_id == ITEM_ID_INIT_DOWNLOAD) {
+                if(l->cat_count == 1) {
+                    return send_quest_list(c, &l->cats[0]);
+                }
+            }
+
+            return -1;
+
         /* Ship */
         case 0x01:
             if(item_id == 0) {
@@ -757,16 +772,16 @@ static int handle_ship_select(login_client_t *c, dc_select_pkt *pkt) {
         case 0x04:
             /* Make sure the item is valid */
             if(item_id < l->cats[0].quest_count) {
-                return send_quest(c, &l->cats[0].quests[item_id]);
+                rv = send_quest(c, &l->cats[0].quests[item_id]);
+
+                if(c->type == CLIENT_TYPE_PC) {
+                    rv |= send_initial_menu(c);
+                }
+
+                return rv;
             }
             else {
                 return -1;
-            }
-
-        /* "Offline Quests" entry of the ship select */
-        case 0xFF:
-            if(l->cat_count == 1) {
-                return send_quest_list(c, &l->cats[0]);
             }
 
         default:
@@ -857,12 +872,6 @@ static int handle_info_req(login_client_t *c, dc_select_pkt *pkt) {
                     __(c, "Player(s)"), row[2], __(c, "Team(s)"));
             return send_info_reply(c, str);
 
-        /* No ships entry */
-        case 0xEF:
-        /* Offline Quests entry */
-        case 0xFF:
-            return send_info_reply(c, __(c, "\tENothing here."));
-
         default:
             /* Ignore any other info requests. */
             return 0;
@@ -885,8 +894,6 @@ int process_dclogin_packet(login_client_t *c, void *pkt) {
         type = pc->pkt_type;
         len = LE16(pc->pkt_len);
     }
-
-    debug(DBG_LOG, "DC/PC/GC: Received type 0x%02X\n", type);
 
     switch(type) {
         case LOGIN_90_TYPE:
@@ -932,7 +939,7 @@ int process_dclogin_packet(login_client_t *c, void *pkt) {
         case SHIP_LIST_TYPE:
             /* XXXX: I don't have anything here either, but thought I'd be
                funny anyway. */
-            return send_ship_list(c, 0x00);
+            return send_initial_menu(c);
 
         case INFO_REQUEST_TYPE:
             /* XXXX: Relevance, at last! */
