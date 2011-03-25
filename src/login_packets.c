@@ -445,7 +445,7 @@ static int send_ship_list_dc(login_client_t *c, uint16_t menu_code) {
     char **row;
     uint32_t ship_id, players;
     int i, len = 0x20, gm_only, flags;
-    char tmp[3];
+    char tmp[3] = { menu_code, menu_code >> 8, 0 };
 
     /* Clear the base packet */
     memset(pkt, 0, sizeof(dc_ship_list_pkt));
@@ -453,12 +453,20 @@ static int send_ship_list_dc(login_client_t *c, uint16_t menu_code) {
     /* Fill in some basic stuff */
     pkt->hdr.pkt_type = BLOCK_LIST_TYPE;
 
-    /* Fill in the "DATABASE/JP" entry */
+    /* Fill in the "SHIP/cc" entry */
     memset(&pkt->entries[0], 0, 0x1C);
     pkt->entries[0].menu_id = LE32(0x00040000);
     pkt->entries[0].item_id = 0;
     pkt->entries[0].flags = LE16(0x0004);
-    strcpy(pkt->entries[0].name, "DATABASE/JP");
+
+    if(menu_code) {
+        sprintf(pkt->entries[0].name, "SHIP/%c%c", (char)menu_code,
+                (char)(menu_code >> 8));
+    }
+    else {
+        strcpy(pkt->entries[0].name, "SHIP/US");
+    }
+
     pkt->entries[0].name[0x11] = 0x08;
     num_ships = 1;
 
@@ -506,10 +514,10 @@ static int send_ship_list_dc(login_client_t *c, uint16_t menu_code) {
             /* Fill in what we have */
             pkt->entries[num_ships].menu_id = LE32(0x00000001);
             pkt->entries[num_ships].item_id = LE32(ship_id);
-            pkt->entries[num_ships].flags = LE16(0x0000);
+            pkt->entries[num_ships].flags = LE16(0x0F04);
 
             /* Create the name string */
-            sprintf(pkt->entries[num_ships].name, "%s (%d)", row[1], players);
+            sprintf(pkt->entries[num_ships].name, "%s", row[1]);
 
             /* We're done with this ship, increment the counter */
             ++num_ships;
@@ -559,14 +567,14 @@ static int send_ship_list_dc(login_client_t *c, uint16_t menu_code) {
         /* Fill in what we have */
         pkt->entries[num_ships].menu_id = LE32((0x00000001 | (ship_id << 8)));
         pkt->entries[num_ships].item_id = LE32(0x00000000);
-        pkt->entries[num_ships].flags = LE16(0x0000);
+        pkt->entries[num_ships].flags = LE16(0x0F04);
 
         /* Create the name string */
         if(tmp[0] && tmp[1]) {
-            sprintf(pkt->entries[num_ships].name, "\tC6%s Ship List", tmp);
+            sprintf(pkt->entries[num_ships].name, "SHIP/%s", tmp);
         }
         else {
-            strcpy(pkt->entries[num_ships].name, "\tC6Main Ships");
+            strcpy(pkt->entries[num_ships].name, "SHIP/Main");
         }
 
         /* We're done with this ship, increment the counter */
@@ -626,12 +634,18 @@ static int send_ship_list_pc(login_client_t *c, uint16_t menu_code) {
     /* Fill in some basic stuff */
     pkt->hdr.pkt_type = BLOCK_LIST_TYPE;
 
-    /* Fill in the "DATABASE/JP" entry */
+    /* Fill in the "SHIP/cc" entry */
     memset(&pkt->entries[0], 0, 0x2C);
     pkt->entries[0].menu_id = LE32(0x00040000);
     pkt->entries[0].item_id = 0;
     pkt->entries[0].flags = LE16(0x0004);
-    memcpy(pkt->entries[0].name, "D\0A\0T\0A\0B\0A\0S\0E\0/\0J\0P\0", 22);
+    memcpy(pkt->entries[0].name, "S\0H\0I\0P\0/\0U\0S\0", 14);
+
+    if(menu_code) {
+        pkt->entries[0].name[5] = LE16((menu_code & 0x00FF));
+        pkt->entries[0].name[6] = LE16((menu_code >> 8));
+    }
+
     num_ships = 1;
 
     /* Get ready to query the database */
@@ -665,10 +679,16 @@ static int send_ship_list_pc(login_client_t *c, uint16_t menu_code) {
             /* Fill in what we have */
             pkt->entries[num_ships].menu_id = LE32(0x00000001);
             pkt->entries[num_ships].item_id = LE32(ship_id);
-            pkt->entries[num_ships].flags = LE16(0x0000);
+            pkt->entries[num_ships].flags = LE16(0x0F04);
 
             /* Create the name string (UTF-8) */
-            sprintf(tmp, "%s (%d)", row[1], players);
+            if(menu_code) {
+                sprintf(tmp, "%c%c/%s", (char)menu_code, (char)(menu_code >> 8),
+                        row[1]);
+            }
+            else {
+                sprintf(tmp, "%s", row[1]);
+            }
 
             /* And convert to UTF-16 */
             in = strlen(tmp);
@@ -725,14 +745,14 @@ static int send_ship_list_pc(login_client_t *c, uint16_t menu_code) {
         /* Fill in what we have */
         pkt->entries[num_ships].menu_id = LE32((0x00000001 | (ship_id << 8)));
         pkt->entries[num_ships].item_id = LE32(0x00000000);
-        pkt->entries[num_ships].flags = LE16(0x0000);
+        pkt->entries[num_ships].flags = LE16(0x0F04);
 
         /* Create the name string (UTF-8) */
         if(tmp2[0] && tmp2[1]) {
-            sprintf(tmp, "\tC6%s Ship List", tmp2);
+            sprintf(tmp, "SHIP/%s", tmp2);
         }
         else {
-            strcpy(tmp, "\tC6Main Ships");
+            strcpy(tmp, "SHIP/Main");
         }
 
         /* And convert to UTF-16 */
@@ -823,7 +843,7 @@ static int send_info_reply_dc(login_client_t *c, const char msg[]) {
     }
 
     /* Convert the message to the appropriate encoding. */
-    in = strlen(msg);
+    in = strlen(msg) + 1;
     out = 65524;
     inptr = (ICONV_CONST char *)msg;
     outptr = pkt->msg;
