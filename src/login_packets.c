@@ -444,7 +444,7 @@ static int send_ship_list_dc(login_client_t *c, uint16_t menu_code) {
     void *result;
     char **row;
     uint32_t ship_id, players;
-    int i, len = 0x20, gm_only, flags;
+    int i, len = 0x20, gm_only, flags, ship_num;
     char tmp[3] = { menu_code, menu_code >> 8, 0 };
 
     /* Clear the base packet */
@@ -484,9 +484,9 @@ static int send_ship_list_dc(login_client_t *c, uint16_t menu_code) {
     }
 
     /* Get ready to query the database */
-    sprintf(query, "SELECT ship_id, name, players, gm_only FROM online_ships "
-            "WHERE menu_code='%hu' AND (flags & 0x%02x) = 0 ORDER BY ship_id",
-            menu_code, flags);
+    sprintf(query, "SELECT ship_id, name, players, gm_only, ship_number FROM "
+            "online_ships WHERE menu_code='%hu' AND (flags & 0x%02x) = 0 ORDER "
+            "BY ship_number", menu_code, flags);
 
     /* Query the database and see what we've got */
     if(sylverant_db_query(&conn, query)) {
@@ -510,6 +510,7 @@ static int send_ship_list_dc(login_client_t *c, uint16_t menu_code) {
             /* Grab info from the row */
             ship_id = (uint32_t)strtoul(row[0], NULL, 0);
             players = (uint32_t)strtoul(row[2], NULL, 0);
+            ship_num = atoi(row[4]);
 
             /* Fill in what we have */
             pkt->entries[num_ships].menu_id = LE32(0x00000001);
@@ -517,7 +518,14 @@ static int send_ship_list_dc(login_client_t *c, uint16_t menu_code) {
             pkt->entries[num_ships].flags = LE16(0x0F04);
 
             /* Create the name string */
-            sprintf(pkt->entries[num_ships].name, "%s", row[1]);
+            if(menu_code) {
+                sprintf(pkt->entries[num_ships].name, "%02X:%c%c/%s", ship_num,
+                        (char)menu_code, (char)(menu_code >> 8), row[1]);
+            }
+            else {
+                sprintf(pkt->entries[num_ships].name, "%02X:%s", ship_num,
+                        row[1]);
+            }
 
             /* We're done with this ship, increment the counter */
             ++num_ships;
@@ -617,7 +625,7 @@ static int send_ship_list_pc(login_client_t *c, uint16_t menu_code) {
     void *result;
     char **row;
     uint32_t ship_id, players;
-    int i, len = 0x30, gm_only;
+    int i, len = 0x30, gm_only, ship_num;
     iconv_t ic = iconv_open("UTF-16LE", "UTF-8");
     size_t in, out;
     ICONV_CONST char *inptr;
@@ -649,9 +657,9 @@ static int send_ship_list_pc(login_client_t *c, uint16_t menu_code) {
     num_ships = 1;
 
     /* Get ready to query the database */
-    sprintf(query, "SELECT ship_id, name, players, gm_only FROM online_ships "
-            "WHERE menu_code='%hu' AND (flags & 0x40) = 0 ORDER BY ship_id",
-            menu_code);
+    sprintf(query, "SELECT ship_id, name, players, gm_only, ship_number FROM "
+            "online_ships WHERE menu_code='%hu' AND (flags & 0x40) = 0 ORDER "
+            "BY ship_number", menu_code);
 
     /* Query the database and see what we've got */
     if(sylverant_db_query(&conn, query)) {
@@ -675,6 +683,7 @@ static int send_ship_list_pc(login_client_t *c, uint16_t menu_code) {
             /* Grab info from the row */
             ship_id = (uint32_t)strtoul(row[0], NULL, 0);
             players = (uint32_t)strtoul(row[2], NULL, 0);
+            ship_num = atoi(row[4]);
 
             /* Fill in what we have */
             pkt->entries[num_ships].menu_id = LE32(0x00000001);
@@ -683,11 +692,11 @@ static int send_ship_list_pc(login_client_t *c, uint16_t menu_code) {
 
             /* Create the name string (UTF-8) */
             if(menu_code) {
-                sprintf(tmp, "%c%c/%s", (char)menu_code, (char)(menu_code >> 8),
-                        row[1]);
+                sprintf(tmp, "%02X:%c%c/%s", ship_num, (char)menu_code,
+                        (char)(menu_code >> 8), row[1]);
             }
             else {
-                sprintf(tmp, "%s", row[1]);
+                sprintf(tmp, "%02X:%s", ship_num, row[1]);
             }
 
             /* And convert to UTF-16 */

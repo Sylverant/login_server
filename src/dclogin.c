@@ -836,6 +836,7 @@ static int handle_info_req(login_client_t *c, dc_select_pkt *pkt) {
     uint32_t menu_id = LE32(pkt->menu_id);
     uint32_t item_id = LE32(pkt->item_id);
     uint16_t menu_code;
+    int ship_num;
     char str[256];
     void *result;
     char **row;
@@ -850,8 +851,9 @@ static int handle_info_req(login_client_t *c, dc_select_pkt *pkt) {
 
             /* We should have a ship ID as the item_id at this point, so query
                the db for the info we want. */
-            sprintf(str, "SELECT name, players, games, menu_code FROM "
-                    "online_ships WHERE ship_id='%lu'", (unsigned long)item_id);
+            sprintf(str, "SELECT name, players, games, menu_code, ship_number "
+                    "FROM online_ships WHERE ship_id='%lu'",
+                    (unsigned long)item_id);
 
             /* Query for what we're looking for */
             if(sylverant_db_query(&conn, str)) {
@@ -870,15 +872,16 @@ static int handle_info_req(login_client_t *c, dc_select_pkt *pkt) {
 
             /* Parse out the menu code */
             menu_code = (uint16_t)atoi(row[3]);
+            ship_num = atoi(row[4]);
 
             /* Send the info reply */
             if(!menu_code) {
-                sprintf(str, "%s\n%s %s\n%s %s", row[0], row[1],
+                sprintf(str, "%02X:%s\n%s %s\n%s %s", ship_num, row[0], row[1],
                         __(c, "Users"), row[2], __(c, "Teams"));
             }
             else {
-                sprintf(str, "%c%c/%s\n%s %s\n%s %s", (char)menu_code,
-                        (char)(menu_code >> 8), row[0], row[1],
+                sprintf(str, "%02X:%c%c/%s\n%s %s\n%s %s", ship_num,
+                        (char)menu_code, (char)(menu_code >> 8), row[0], row[1],
                         __(c, "Users"), row[2], __(c, "Teams"));
             }
 
