@@ -43,9 +43,47 @@
 #include "login.h"
 #include "login_packets.h"
 
+#ifndef ENABLE_IPV6
 #define NUM_DCSOCKS  2
+#define NUM_PCSOCKS  1
 #define NUM_GCSOCKS  3
 #define NUM_EP3SOCKS 3
+#define NUM_WEBSOCKS 1
+#else
+#define NUM_DCSOCKS  2
+#define NUM_PCSOCKS  1
+#define NUM_GCSOCKS  3
+#define NUM_EP3SOCKS 3
+#define NUM_WEBSOCKS 2
+#endif
+
+static const int dcports[NUM_DCSOCKS][2] = {
+    { AF_INET , 9200 },
+    { AF_INET , 9201 }
+};
+
+static const int pcports[NUM_PCSOCKS][2] = {
+    { AF_INET , 9300 }
+};
+
+static const int gcports[NUM_GCSOCKS][2] = {
+    { AF_INET , 9100 },
+    { AF_INET , 9000 },
+    { AF_INET , 9001 }
+};
+
+static const int ep3ports[NUM_EP3SOCKS][2] = {
+    { AF_INET , 9103 },
+    { AF_INET , 9003 },
+    { AF_INET , 9203 }
+};
+
+static const int webports[NUM_WEBSOCKS][2] = {
+    { AF_INET , 10003 },
+#ifdef ENABLE_IPV6
+    { AF_INET6, 10003 }
+#endif
+};
 
 /* Stuff read from the config files */
 sylverant_dbconn_t conn;
@@ -192,13 +230,36 @@ int ship_transfer(login_client_t *c, uint32_t shipid) {
     return send_redirect(c, ip, port);
 }
 
-static void run_server(int dcsocks[NUM_DCSOCKS], int pcsock,
-                       int gcsocks[NUM_GCSOCKS], int websock,
+static const void *my_ntop(struct sockaddr_storage *addr,
+                           char str[INET6_ADDRSTRLEN]) {
+    int family = addr->ss_family;
+
+    switch(family) {
+        case AF_INET:
+        {
+            struct sockaddr_in *a = (struct sockaddr_in *)addr;
+            return inet_ntop(family, &a->sin_addr, str, INET6_ADDRSTRLEN);
+        }
+
+        case AF_INET6:
+        {
+            struct sockaddr_in6 *a = (struct sockaddr_in6 *)addr;
+            return inet_ntop(family, &a->sin6_addr, str, INET6_ADDRSTRLEN);
+        }
+    }
+
+    return NULL;
+}
+
+static void run_server(int dcsocks[NUM_DCSOCKS], int pcsocks[NUM_PCSOCKS],
+                       int gcsocks[NUM_GCSOCKS], int websocks[NUM_WEBSOCKS],
                        int ep3socks[NUM_EP3SOCKS]) {
     fd_set readfds, writefds;
     struct timeval timeout;
     socklen_t len;
     struct sockaddr_in addr;
+    struct sockaddr_storage addr_s;
+    char ipstr[INET6_ADDRSTRLEN];
     int nfds, asock, j;
     login_client_t *i, *tmp;
     ssize_t sent;
@@ -242,10 +303,15 @@ static void run_server(int dcsocks[NUM_DCSOCKS], int pcsock,
             nfds = nfds > ep3socks[j] ? nfds : ep3socks[j];
         }
 
-        FD_SET(pcsock, &readfds);
-        nfds = nfds > pcsock ? nfds : pcsock;
-        FD_SET(websock, &readfds);
-        nfds = nfds > websock ? nfds : websock;
+        for(j = 0; j < NUM_PCSOCKS; ++j) {
+            FD_SET(pcsocks[j], &readfds);
+            nfds = nfds > pcsocks[j] ? nfds : pcsocks[j];
+        }
+
+        for(j = 0; j < NUM_WEBSOCKS; ++j) {
+            FD_SET(websocks[j], &readfds);
+            nfds = nfds > websocks[j] ? nfds : websocks[j];
+        }
 
         if(select(nfds + 1, &readfds, &writefds, NULL, &timeout) > 0) {
             /* See if we have an incoming client. */
@@ -271,23 +337,25 @@ static void run_server(int dcsocks[NUM_DCSOCKS], int pcsock,
                 }
             }
 
-            if(FD_ISSET(pcsock, &readfds)) {
-                len = sizeof(struct sockaddr_in);
+            for(j = 0; j < NUM_PCSOCKS; ++j) {
+                if(FD_ISSET(pcsocks[j], &readfds)) {
+                    len = sizeof(struct sockaddr_in);
 
-                if((asock = accept(pcsock, (struct sockaddr *)&addr,
-                                   &len)) < 0) {
-                    perror("accept");
-                }
+                    if((asock = accept(pcsocks[j], (struct sockaddr *)&addr,
+                                       &len)) < 0) {
+                        perror("accept");
+                    }
 
-                debug(DBG_LOG, "Accepted PC connection from %s\n",
-                      inet_ntoa(addr.sin_addr));
+                    debug(DBG_LOG, "Accepted PC connection from %s\n",
+                          inet_ntoa(addr.sin_addr));
 
-                if(create_connection(asock, addr.sin_addr.s_addr,
-                                     CLIENT_TYPE_PC) == NULL) {
-                    close(asock);
-                }
-                else {
-                    ++client_count;
+                    if(create_connection(asock, addr.sin_addr.s_addr,
+                                         CLIENT_TYPE_PC) == NULL) {
+                        close(asock);
+                    }
+                    else {
+                        ++client_count;
+                    }
                 }
             }
 
@@ -335,22 +403,25 @@ static void run_server(int dcsocks[NUM_DCSOCKS], int pcsock,
                 }
             }
 
-            if(FD_ISSET(websock, &readfds)) {
-                len = sizeof(struct sockaddr_in);
+            for(j = 0; j < NUM_WEBSOCKS; ++j) {
+                if(FD_ISSET(websocks[j], &readfds)) {
+                    len = sizeof(struct sockaddr_storage);
 
-                if((asock = accept(websock, (struct sockaddr *)&addr,
-                                   &len)) < 0) {
-                    perror("accept");
-                }
-                else {
-                    debug(DBG_LOG, "Accepted web connection from %s\n",
-                          inet_ntoa(addr.sin_addr));
+                    if((asock = accept(websocks[j], (struct sockaddr *)&addr_s,
+                                       &len)) < 0) {
+                        perror("accept");
+                    }
+                    else {
+                        my_ntop(&addr_s, ipstr);
+                        debug(DBG_LOG, "Accepted web connection from %s\n",
+                              ipstr);
 
-                    /* Send the number of connected clients, and close the
-                       socket. */
-                    client_count = LE32(client_count);
-                    send(asock, &client_count, 4, 0);
-                    close(asock);
+                        /* Send the number of connected clients, and close the
+                           socket. */
+                        client_count = LE32(client_count);
+                        send(asock, &client_count, 4, 0);
+                        close(asock);
+                    }
                 }
             }
 
@@ -409,12 +480,13 @@ static void run_server(int dcsocks[NUM_DCSOCKS], int pcsock,
     }
 }
 
-static int open_sock(uint16_t port) {
+static int open_sock(int family, uint16_t port) {
     int sock = -1, val;
     struct sockaddr_in addr;
+    struct sockaddr_in6 addr6;
 
     /* Create the socket and listen for connections. */
-    sock = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
+    sock = socket(family, SOCK_STREAM, IPPROTO_TCP);
 
     if(sock < 0) {
         perror("socket");
@@ -431,21 +503,54 @@ static int open_sock(uint16_t port) {
            anyway... */
     }
 
-    addr.sin_family = AF_INET;
-    addr.sin_addr.s_addr = INADDR_ANY;
-    addr.sin_port = htons(port);
-    memset(addr.sin_zero, 0, 8);
+    if(family == PF_INET) {
+        addr.sin_family = family;
+        addr.sin_addr.s_addr = INADDR_ANY;
+        addr.sin_port = htons(port);
+        memset(addr.sin_zero, 0, 8);
 
-    if(bind(sock, (struct sockaddr *)&addr, sizeof(struct sockaddr_in))) {
-        perror("bind");
-        sylverant_db_close(&conn);
-        close(sock);
-        return -1;
+        if(bind(sock, (struct sockaddr *)&addr, sizeof(struct sockaddr_in))) {
+            perror("bind");
+            close(sock);
+            return -1;
+        }
+
+        if(listen(sock, 10)) {
+            perror("listen");
+            close(sock);
+            return -1;
+        }
     }
+    else if(family == PF_INET6) {
+        /* Since we create separate sockets for IPv4 and IPv6, make this one
+           support ONLY IPv6. */
+        val = 1;
+        if(setsockopt(sock, IPPROTO_IPV6, IPV6_V6ONLY, &val, sizeof(int))) {
+            perror("setsockopt IPV6_V6ONLY");
+            close(sock);
+            return -1;
+        }
 
-    if(listen(sock, 10)) {
-        perror("listen");
-        sylverant_db_close(&conn);
+        memset(&addr6, 0, sizeof(struct sockaddr_in6));
+
+        addr6.sin6_family = family;
+        addr6.sin6_addr = in6addr_any;
+        addr6.sin6_port = htons(port);
+
+        if(bind(sock, (struct sockaddr *)&addr6, sizeof(struct sockaddr_in6))) {
+            perror("bind");
+            close(sock);
+            return -1;
+        }
+
+        if(listen(sock, 10)) {
+            perror("listen");
+            close(sock);
+            return -1;
+        }
+    }
+    else {
+        debug(DBG_ERROR, "Unknown socket family\n");
         close(sock);
         return -1;
     }
@@ -468,10 +573,12 @@ static void open_log() {
 }
 
 int main(int argc, char *argv[]) {
-    int pcsock, websock, i, j;
+    int i, j;
     int dcsocks[NUM_DCSOCKS];
+    int pcsocks[NUM_PCSOCKS];
     int gcsocks[NUM_GCSOCKS];
     int ep3socks[NUM_EP3SOCKS];
+    int websocks[NUM_WEBSOCKS];
 
     chdir(sylverant_directory);
 
@@ -493,87 +600,71 @@ int main(int argc, char *argv[]) {
     /* Init mini18n if we have it. */
     init_i18n();
 
-    debug(DBG_LOG, "Opening Dreamcast/EU GC (60hz) port (9200) for "
-          "connections.\n");
-    dcsocks[0] = open_sock(9200);
+    debug(DBG_LOG, "Opening Dreamcast ports for connections.\n");
 
-    if(dcsocks[0] < 0) {
-        exit(EXIT_FAILURE);
+    for(i = 0; i < NUM_DCSOCKS; ++i) {
+        dcsocks[i] = open_sock(dcports[i][0], dcports[i][1]);
+
+        if(dcsocks[i] < 0) {
+            sylverant_db_close(&conn);
+            exit(EXIT_FAILURE);
+        }
     }
 
-    debug(DBG_LOG, "Opening Dreamcast/EU GC (50hz) port (9201) for "
-          "connections.\n");
-    dcsocks[1] = open_sock(9201);
+    debug(DBG_LOG, "Opening PSO for PC ports for connections.\n");
 
-    if(dcsocks[1] < 0) {
-        exit(EXIT_FAILURE);
+    for(i = 0; i < NUM_PCSOCKS; ++i) {
+        pcsocks[i] = open_sock(pcports[i][0], pcports[i][1]);
+
+        if(pcsocks[i] < 0) {
+            sylverant_db_close(&conn);
+            exit(EXIT_FAILURE);
+        }
     }
 
-    debug(DBG_LOG, "Opening PC port (9300) for connections.\n");
-    pcsock = open_sock(9300);
+    debug(DBG_LOG, "Opening PSO for Gamecube ports for connections.\n");
 
-    if(pcsock < 0) {
-        exit(EXIT_FAILURE);
+    for(i = 0; i < NUM_GCSOCKS; ++i) {
+        gcsocks[i] = open_sock(gcports[i][0], gcports[i][1]);
+
+        if(gcsocks[i] < 0) {
+            sylverant_db_close(&conn);
+            exit(EXIT_FAILURE);
+        }
     }
 
-    debug(DBG_LOG, "Opening US GC port (9100) for connections.\n");
-    gcsocks[0] = open_sock(9100);
+    debug(DBG_LOG, "Opening PSO Episode 3 ports for connections.\n");
 
-    if(gcsocks[0] < 0) {
-        exit(EXIT_FAILURE);
+    for(i = 0; i < NUM_EP3SOCKS; ++i) {
+        ep3socks[i] = open_sock(ep3ports[i][0], ep3ports[i][1]);
+
+        if(ep3socks[i] < 0) {
+            sylverant_db_close(&conn);
+            exit(EXIT_FAILURE);
+        }
     }
 
-    debug(DBG_LOG, "Opening JP GC (1.0) port (9000) for connections.\n");
-    gcsocks[1] = open_sock(9000);
+    debug(DBG_LOG, "Opening Web access ports for connections.\n");
 
-    if(gcsocks[1] < 0) {
-        exit(EXIT_FAILURE);
-    }
+    for(i = 0; i < NUM_WEBSOCKS; ++i) {
+        websocks[i] = open_sock(webports[i][0], webports[i][1]);
 
-    debug(DBG_LOG, "Opening JP GC (1.1) port (9001) for connections.\n");
-    gcsocks[2] = open_sock(9001);
-
-    if(gcsocks[2] < 0) {
-        exit(EXIT_FAILURE);
-    }
-
-    debug(DBG_LOG, "Opening US GC Ep3 port (9103) for connections.\n");
-    ep3socks[0] = open_sock(9103);
-
-    if(ep3socks[0] < 0) {
-        exit(EXIT_FAILURE);
-    }
-
-    debug(DBG_LOG, "Opening EU GC Ep3 port (9203) for connections.\n");
-    ep3socks[1] = open_sock(9203);
-
-    if(ep3socks[1] < 0) {
-        exit(EXIT_FAILURE);
-    }
-
-    debug(DBG_LOG, "Opening JP GC Ep3 port (9003) for connections.\n");
-    ep3socks[2] = open_sock(9003);
-    
-    if(ep3socks[2] < 0) {
-        exit(EXIT_FAILURE);
-    }
-
-    debug(DBG_LOG, "Opening Web port (10003) for connections.\n");
-    websock = open_sock(10003);
-
-    if(websock < 0) {
-        exit(EXIT_FAILURE);
+        if(websocks[i] < 0) {
+            sylverant_db_close(&conn);
+            exit(EXIT_FAILURE);
+        }
     }
 
     /* Run the login server. */
-    run_server(dcsocks, pcsock, gcsocks, websock, ep3socks);
+    run_server(dcsocks, pcsocks, gcsocks, websocks, ep3socks);
 
     /* Clean up. */
-    close(pcsock);
-    close(websock);
-
     for(i = 0; i < NUM_DCSOCKS; ++i) {
         close(dcsocks[i]);
+    }
+
+    for(i = 0; i < NUM_PCSOCKS; ++i) {
+        close(pcsocks[i]);
     }
 
     for(i = 0; i < NUM_GCSOCKS; ++i) {
@@ -582,6 +673,10 @@ int main(int argc, char *argv[]) {
 
     for(i = 0; i < NUM_EP3SOCKS; ++i) {
         close(ep3socks[i]);
+    }
+
+    for(i = 0; i < NUM_WEBSOCKS; ++i) {
+        close(websocks[i]);
     }
 
     sylverant_db_close(&conn);

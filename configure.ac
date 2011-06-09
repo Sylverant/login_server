@@ -1,7 +1,7 @@
 dnl
 dnl This file is part of Sylverant PSO Server.
 dnl
-dnl Copyright (C) 2009 Lawrence Sebald
+dnl Copyright (C) 2009, 2011 Lawrence Sebald
 dnl
 dnl This program is free software: you can redistribute it and/or modify
 dnl it under the terms of the GNU Affero General Public License version 3
@@ -66,6 +66,14 @@ AC_FUNC_REALLOC
 AC_CHECK_FUNCS([gethostname gettimeofday inet_ntoa memmove memset select socket strtoul])
 
 ADD_CFLAGS([-Wall])
+
+AC_ARG_ENABLE([ipv6], [AS_HELP_STRING([--disable-ipv6],
+               [disable IPv6 support (enabled by default)])],
+               [enable_ipv6=$withval],
+               [enable_ipv6=yes])
+
+AS_IF([test "x$enable_ipv6" != xno],
+      [AC_DEFINE([ENABLE_IPV6], [1], [Define if you want IPv6 support])])
 
 AC_CONFIG_FILES([Makefile]
                 [l10n/Makefile])
