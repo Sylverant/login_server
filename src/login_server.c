@@ -87,7 +87,7 @@ static const int webports[NUM_WEBSOCKS][2] = {
 
 /* Stuff read from the config files */
 sylverant_dbconn_t conn;
-sylverant_config_t cfg;
+sylverant_config_t *cfg;
 sylverant_limits_t *limits = NULL;
 
 sylverant_quest_list_t qlist[CLIENT_TYPE_COUNT][CLIENT_LANG_COUNT];
@@ -168,10 +168,10 @@ static void load_config() {
     }
 
     /* Attempt to read each quests file... */
-    if(cfg.quests_dir[0]) {
+    if(cfg->quests_dir && cfg->quests_dir[0]) {
         for(i = 0; i < CLIENT_TYPE_COUNT; ++i) {
             for(j = 0; j < CLIENT_LANG_COUNT; ++j) {
-                sprintf(fn, "%s/%s-%s/quests.xml", cfg.quests_dir,
+                sprintf(fn, "%s/%s-%s/quests.xml", cfg->quests_dir,
                         type_codes[i], language_codes[j]);
                 if(!sylverant_quests_read(fn, &qlist[i][j])) {
                     debug(DBG_LOG, "Read quests for %s-%s\n", type_codes[i],
@@ -182,15 +182,15 @@ static void load_config() {
     }
 
     /* Attempt to read the legit items list */
-    if(cfg.limits_file[0]) {
-        if(sylverant_read_limits(cfg.limits_file, &limits)) {
+    if(cfg->limits_file && cfg->limits_file[0]) {
+        if(sylverant_read_limits(cfg->limits_file, &limits)) {
             debug(DBG_WARN, "Cannot read specified limits file\n");
         }
     }
 
     debug(DBG_LOG, "Connecting to the database...\n");
 
-    if(sylverant_db_open(&cfg.dbcfg, &conn)) {
+    if(sylverant_db_open(&cfg->dbcfg, &conn)) {
         debug(DBG_ERROR, "Can't connect to the database\n");
         exit(EXIT_FAILURE);
     }
@@ -687,6 +687,7 @@ int main(int argc, char *argv[]) {
         }
     }
 
+    sylverant_free_config(cfg);
 	cleanup_i18n();
 
     return 0;

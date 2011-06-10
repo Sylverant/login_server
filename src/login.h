@@ -108,7 +108,7 @@ TAILQ_HEAD(client_queue, login_client);
 extern struct client_queue clients;
 
 extern sylverant_dbconn_t conn;
-extern sylverant_config_t cfg;
+extern sylverant_config_t *cfg;
 
 login_client_t *create_connection(int sock, in_addr_t ip, int type);
 void destroy_connection(login_client_t *c);

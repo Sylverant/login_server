@@ -42,7 +42,6 @@ static mini18n_t langs[CLIENT_LANG_COUNT];
 #endif
 
 extern sylverant_dbconn_t conn;
-extern sylverant_config_t cfg;
 extern sylverant_quest_list_t qlist[CLIENT_TYPE_COUNT][CLIENT_LANG_COUNT];
 extern sylverant_limits_t *limits;
 extern int ship_transfer(login_client_t *c, uint32_t shipid);

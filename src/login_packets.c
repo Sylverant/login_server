@@ -33,7 +33,7 @@
 #include "login_packets.h"
 
 extern sylverant_dbconn_t conn;
-extern sylverant_config_t cfg;
+extern sylverant_config_t *cfg;
 extern sylverant_quest_list_t qlist[CLIENT_TYPE_COUNT][CLIENT_LANG_COUNT];
 
 uint8_t sendbuf[65536];
@@ -279,7 +279,7 @@ int send_redirect(login_client_t *c, in_addr_t ip, uint16_t port) {
 int send_selective_redirect(login_client_t *c) {
     dc_redirect_pkt *pkt = (dc_redirect_pkt *)sendbuf;
     dc_pkt_hdr_t *hdr2 = (dc_pkt_hdr_t *)(sendbuf + 0x19);
-    in_addr_t addr = cfg.server_ip;
+    in_addr_t addr = cfg->server_ip;
 
     /* Wipe the packet */
     memset(pkt, 0, 0xB0);
@@ -1158,7 +1158,7 @@ int send_quest(login_client_t *c, sylverant_quest_t *q) {
     size_t read;
 
     /* Figure out what file we're going to send. */
-    sprintf(filename, "%s/%s-%s/%s.qst", cfg.quests_dir, type_codes[c->type],
+    sprintf(filename, "%s/%s-%s/%s.qst", cfg->quests_dir, type_codes[c->type],
             language_codes[c->language_code], q->prefix);
     fp = fopen(filename, "rb");
 
