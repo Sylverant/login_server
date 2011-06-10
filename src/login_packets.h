@@ -57,6 +57,11 @@ int send_dc_security(login_client_t *c, uint32_t gc, uint8_t *data,
 /* Send a redirect packet to the given client. */
 int send_redirect(login_client_t *c, in_addr_t ip, uint16_t port);
 
+#ifdef ENABLE_IPV6
+/* Send a redirect packet (IPv6) to the given client. */
+int send_redirect6(login_client_t *c, struct in6_addr *ip, uint16_t port);
+#endif
+
 /* Send a packet to clients connecting on the Gamecube port to sort out any PC
    clients that might end up there. This must be sent before encryption is set
    up! */

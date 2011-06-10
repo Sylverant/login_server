@@ -40,8 +40,9 @@ typedef struct login_client {
     int sock;
     int disconnected;
     int hdr_size;
+    int is_ipv6;
 
-    in_addr_t ip_addr;
+    struct sockaddr_storage ip_addr;
     uint32_t guildcard;
     int language_code;
     int is_gm;
@@ -110,7 +111,8 @@ extern struct client_queue clients;
 extern sylverant_dbconn_t conn;
 extern sylverant_config_t *cfg;
 
-login_client_t *create_connection(int sock, in_addr_t ip, int type);
+login_client_t *create_connection(int sock, int type, struct sockaddr *ip,
+                                  socklen_t size);
 void destroy_connection(login_client_t *c);
 
 int process_dclogin_packet(login_client_t *c, void *pkt);

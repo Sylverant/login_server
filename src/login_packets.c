@@ -273,10 +273,54 @@ int send_redirect(login_client_t *c, in_addr_t ip, uint16_t port) {
     return -1;
 }
 
+#ifdef ENABLE_IPV6
+/* Send a redirect packet (IPv6) to the given client. */
+static int send_redirect6_dc(login_client_t *c, struct in6_addr *ip,
+                             uint16_t port) {
+    dc_redirect6_pkt *pkt = (dc_redirect6_pkt *)sendbuf;
+
+    /* Wipe the packet */
+    memset(pkt, 0, DC_REDIRECT6_LENGTH);
+
+    /* Fill in the header */
+    if(c->type == CLIENT_TYPE_DC || c->type == CLIENT_TYPE_GC ||
+       c->type == CLIENT_TYPE_EP3) {
+        pkt->hdr.dc.pkt_type = REDIRECT_TYPE;
+        pkt->hdr.dc.pkt_len = LE16(DC_REDIRECT6_LENGTH);
+        pkt->hdr.dc.flags = 6;
+    }
+    else {
+        pkt->hdr.pc.pkt_type = REDIRECT_TYPE;
+        pkt->hdr.pc.pkt_len = LE16(DC_REDIRECT6_LENGTH);
+        pkt->hdr.pc.flags = 6;
+    }
+
+    /* Fill in the IP and port */
+    memcpy(pkt->ip_addr, ip, 16);
+    pkt->port = LE16(port);
+
+    /* Send the packet away */
+    return crypt_send(c, DC_REDIRECT6_LENGTH);
+}
+
+int send_redirect6(login_client_t *c, struct in6_addr *ip, uint16_t port) {
+    /* Call the appropriate function. */
+    switch(c->type) {
+        case CLIENT_TYPE_DC:
+        case CLIENT_TYPE_PC:
+        case CLIENT_TYPE_GC:
+        case CLIENT_TYPE_EP3:
+            return send_redirect6_dc(c, ip, port);
+    }
+
+    return -1;
+}
+#endif
+
 /* Send a packet to clients connecting on the Gamecube port to sort out any PC
    clients that might end up there. This must be sent before encryption is set
    up! */
-int send_selective_redirect(login_client_t *c) {
+static int send_selective_redirect_ipv4(login_client_t *c) {
     dc_redirect_pkt *pkt = (dc_redirect_pkt *)sendbuf;
     dc_pkt_hdr_t *hdr2 = (dc_pkt_hdr_t *)(sendbuf + 0x19);
     in_addr_t addr = cfg->server_ip;
@@ -299,6 +343,41 @@ int send_selective_redirect(login_client_t *c) {
 
     /* Send it away */
     return send_raw(c, 0xB0);
+}
+
+static int send_selective_redirect_ipv6(login_client_t *c) {
+    dc_redirect6_pkt *pkt = (dc_redirect6_pkt *)sendbuf;
+    dc_pkt_hdr_t *hdr2 = (dc_pkt_hdr_t *)(sendbuf + 0x19);
+
+    /* Wipe the packet */
+    memset(pkt, 0, 0xB0);
+
+    /* Fill in the redirect packet. PC users will parse this out as a type 0x19
+       (Redirect) with size 0xB0. GC/DC users would parse it out as a type 0xB0
+       (Ignored) with a size of 0x19. The second header takes care of the rest
+       of the 0xB0 size. */
+    pkt->hdr.pc.pkt_type = REDIRECT_TYPE;
+    pkt->hdr.pc.pkt_len = LE16(0x00B0);
+    pkt->hdr.pc.flags = 6;
+    memcpy(pkt->ip_addr, cfg->server_ip6, 16);
+    pkt->port = LE16(9300);
+
+    /* Fill in the secondary header */
+    hdr2->pkt_type = 0xB0;
+    hdr2->pkt_len = LE16(0x0097);
+
+    /* Send it away */
+    return send_raw(c, 0xB0);
+}
+
+int send_selective_redirect(login_client_t *c) {
+#ifdef ENABLE_IPV6
+    if(c->is_ipv6) {
+        return send_selective_redirect_ipv6(c);
+    }
+#endif
+
+    return send_selective_redirect_ipv4(c);
 }
 
 /* Send a timestamp packet to the given client. */

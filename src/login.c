@@ -34,7 +34,8 @@ struct client_queue clients = TAILQ_HEAD_INITIALIZER(clients);
 uint8_t recvbuf[65536];
 
 /* Create a new connection, storing it in the list of clients. */
-login_client_t *create_connection(int sock, in_addr_t ip, int type) {
+login_client_t *create_connection(int sock, int type, struct sockaddr *ip,
+                                  socklen_t size) {
     login_client_t *rv = (login_client_t *)malloc(sizeof(login_client_t));
     uint32_t client_seed_dc, server_seed_dc;
 
@@ -47,8 +48,13 @@ login_client_t *create_connection(int sock, in_addr_t ip, int type) {
 
     /* Store basic parameters in the client structure. */
     rv->sock = sock;
-    rv->ip_addr = ip;
     rv->type = type;
+    memcpy(&rv->ip_addr, ip, size);
+
+    /* Is the user on IPv6? */
+    if(ip->sa_family == AF_INET6) {
+        rv->is_ipv6 = 1;
+    }
 
     switch(type) {
         case CLIENT_TYPE_DC:

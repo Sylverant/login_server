@@ -111,16 +111,23 @@ static void print_packet(unsigned char *pkt, int len) {
 }
 
 /* Check if an IP has been IP banned from the server. */
-static int is_ip_banned(in_addr_t ip, time_t *until, char *reason) {
+static int is_ip_banned(login_client_t *c, time_t *until, char *reason) {
     char query[256];
     void *result;
     char **row;
     int rv = 0;
+    struct sockaddr_in *addr = (struct sockaddr_in *)&c->ip_addr;
+
+    /* XXXX: Need IPv6 bans too! */
+    if(c->is_ipv6) {
+        return 0;
+    }
 
     /* Fill in the query. */
     sprintf(query, "SELECT enddate, reason FROM ip_bans NATURAL JOIN bans "
             "WHERE addr = '%u' AND enddate >= UNIX_TIMESTAMP() "
-            "AND startdate <= UNIX_TIMESTAMP()", (unsigned int)ip);
+            "AND startdate <= UNIX_TIMESTAMP()",
+            (unsigned int)addr->sin_addr.s_addr);
 
     /* If we can't query the database, fail. */
     if(sylverant_db_query(&conn, query)) {
@@ -229,7 +236,7 @@ static int handle_login0(login_client_t *c, dc_login_90_pkt *pkt) {
     char **row;
     uint8_t resp = LOGIN_90_OK;
     time_t banlen;
-    int banned = is_ip_banned(c->ip_addr, &banlen, query);
+    int banned = is_ip_banned(c, &banlen, query);
 
     /* Make sure the user isn't IP banned. */
     if(banned == -1) {
@@ -387,7 +394,7 @@ static int handle_logina(login_client_t *c, dcv2_login_9a_pkt *pkt) {
     void *result;
     char **row;
     time_t banlen;
-    int banned = is_ip_banned(c->ip_addr, &banlen, query);
+    int banned = is_ip_banned(c, &banlen, query);
 
     /* Make sure the user isn't IP banned. */
     if(banned == -1) {
@@ -514,7 +521,7 @@ static int handle_gchlcheck(login_client_t *c, gc_hlcheck_pkt *pkt) {
     void *result;
     char **row;
     time_t banlen;
-    int banned = is_ip_banned(c->ip_addr, &banlen, query);
+    int banned = is_ip_banned(c, &banlen, query);
 
     /* Make sure the user isn't IP banned. */
     if(banned == -1) {
