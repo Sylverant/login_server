@@ -553,6 +553,9 @@ static int send_ship_list_dc(login_client_t *c, uint16_t menu_code) {
     if(c->type == CLIENT_TYPE_GC) {
         flags = 0x80;
     }
+    else if(c->type == CLIENT_TYPE_EP3) {
+        flags = 0x100;
+    }
     else {
         if(c->version == SYLVERANT_QUEST_V1) {
             flags = 0x10;
