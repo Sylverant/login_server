@@ -275,7 +275,7 @@ int send_redirect(login_client_t *c, in_addr_t ip, uint16_t port) {
 
 #ifdef ENABLE_IPV6
 /* Send a redirect packet (IPv6) to the given client. */
-static int send_redirect6_dc(login_client_t *c, struct in6_addr *ip,
+static int send_redirect6_dc(login_client_t *c, const uint8_t ip[16],
                              uint16_t port) {
     dc_redirect6_pkt *pkt = (dc_redirect6_pkt *)sendbuf;
 
@@ -303,7 +303,7 @@ static int send_redirect6_dc(login_client_t *c, struct in6_addr *ip,
     return crypt_send(c, DC_REDIRECT6_LENGTH);
 }
 
-int send_redirect6(login_client_t *c, struct in6_addr *ip, uint16_t port) {
+int send_redirect6(login_client_t *c, const uint8_t ip[16], uint16_t port) {
     /* Call the appropriate function. */
     switch(c->type) {
         case CLIENT_TYPE_DC:

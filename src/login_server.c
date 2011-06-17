@@ -219,10 +219,14 @@ int ship_transfer(login_client_t *c, uint32_t shipid) {
     char **row;
     in_addr_t ip;
     uint16_t port;
+#ifdef ENABLE_IPV6
+    uint64_t ip6_hi, ip6_lo;
+    uint8_t ip6[16];
+#endif
 
     /* Query the database for the ship in question */
-    sprintf(query, "SELECT ip, port FROM online_ships WHERE ship_id='%lu'",
-            (unsigned long)shipid);
+    sprintf(query, "SELECT ip, port, ship_ip6_high, ship_ip6_low FROM "
+            "online_ships WHERE ship_id='%lu'", (unsigned long)shipid);
 
     if(sylverant_db_query(&conn, query)) {
         return -1;
@@ -237,14 +241,42 @@ int ship_transfer(login_client_t *c, uint32_t shipid) {
     }
 
     /* Grab the data from the row */
-    ip = htonl((in_addr_t)strtoul(row[0], NULL, 0));
-    port = (uint16_t)strtoul(row[1], NULL, 0);
+    port = (uint16_t)strtoul(row[1], NULL, 0) + c->type;
 
-    /* If the client is on the PC/GC version, connect to the PC/GC version port,
-       rather than the one for the DC version. */
-    port += c->type;
+#ifdef ENABLE_IPV6
+    if(row[2] && row[3]) {
+        ip6_hi = (uint64_t)strtoull(row[2], NULL, 0);
+        ip6_lo = (uint64_t)strtoull(row[3], NULL, 0);
+    }
 
-    return send_redirect(c, ip, port);
+    if(!c->is_ipv6 || !row[2] || !row[3] || !ip6_hi) {
+#endif
+        ip = htonl((in_addr_t)strtoul(row[0], NULL, 0));
+
+        return send_redirect(c, ip, port);
+#ifdef ENABLE_IPV6
+    }
+    else {
+        ip6[0] = (uint8_t)(ip6_hi >> 56);
+        ip6[1] = (uint8_t)(ip6_hi >> 48);
+        ip6[2] = (uint8_t)(ip6_hi >> 40);
+        ip6[3] = (uint8_t)(ip6_hi >> 32);
+        ip6[4] = (uint8_t)(ip6_hi >> 24);
+        ip6[5] = (uint8_t)(ip6_hi >> 16);
+        ip6[6] = (uint8_t)(ip6_hi >> 8);
+        ip6[7] = (uint8_t)(ip6_hi);
+        ip6[8] = (uint8_t)(ip6_lo >> 56);
+        ip6[9] = (uint8_t)(ip6_lo >> 48);
+        ip6[10] = (uint8_t)(ip6_lo >> 40);
+        ip6[11] = (uint8_t)(ip6_lo >> 32);
+        ip6[12] = (uint8_t)(ip6_lo >> 24);
+        ip6[13] = (uint8_t)(ip6_lo >> 16);
+        ip6[14] = (uint8_t)(ip6_lo >> 8);
+        ip6[15] = (uint8_t)(ip6_lo);
+
+        return send_redirect6(c, ip6, port);
+    }
+#endif
 }
 
 static const void *my_ntop(struct sockaddr_storage *addr,

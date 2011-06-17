@@ -59,7 +59,7 @@ int send_redirect(login_client_t *c, in_addr_t ip, uint16_t port);
 
 #ifdef ENABLE_IPV6
 /* Send a redirect packet (IPv6) to the given client. */
-int send_redirect6(login_client_t *c, struct in6_addr *ip, uint16_t port);
+int send_redirect6(login_client_t *c, const uint8_t ip[16], uint16_t port);
 #endif
 
 /* Send a packet to clients connecting on the Gamecube port to sort out any PC
