@@ -345,35 +345,11 @@ static int send_selective_redirect_ipv4(login_client_t *c) {
     return send_raw(c, 0xB0);
 }
 
-static int send_selective_redirect_ipv6(login_client_t *c) {
-    dc_redirect6_pkt *pkt = (dc_redirect6_pkt *)sendbuf;
-    dc_pkt_hdr_t *hdr2 = (dc_pkt_hdr_t *)(sendbuf + 0x19);
-
-    /* Wipe the packet */
-    memset(pkt, 0, 0xB0);
-
-    /* Fill in the redirect packet. PC users will parse this out as a type 0x19
-       (Redirect) with size 0xB0. GC/DC users would parse it out as a type 0xB0
-       (Ignored) with a size of 0x19. The second header takes care of the rest
-       of the 0xB0 size. */
-    pkt->hdr.pc.pkt_type = REDIRECT_TYPE;
-    pkt->hdr.pc.pkt_len = LE16(0x00B0);
-    pkt->hdr.pc.flags = 6;
-    memcpy(pkt->ip_addr, cfg->server_ip6, 16);
-    pkt->port = LE16(9300);
-
-    /* Fill in the secondary header */
-    hdr2->pkt_type = 0xB0;
-    hdr2->pkt_len = LE16(0x0097);
-
-    /* Send it away */
-    return send_raw(c, 0xB0);
-}
-
 int send_selective_redirect(login_client_t *c) {
 #ifdef ENABLE_IPV6
     if(c->is_ipv6) {
-        return send_selective_redirect_ipv6(c);
+        /* This is handled in the proxy for IPv6. */
+        return 0;
     }
 #endif
 
