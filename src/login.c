@@ -38,6 +38,8 @@ login_client_t *create_connection(int sock, int type, struct sockaddr *ip,
                                   socklen_t size) {
     login_client_t *rv = (login_client_t *)malloc(sizeof(login_client_t));
     uint32_t client_seed_dc, server_seed_dc;
+    uint8_t client_seed_bb[48], server_seed_bb[48];
+    int i;
 
     if(!rv) {
         perror("malloc");
@@ -102,6 +104,38 @@ login_client_t *create_connection(int sock, int type, struct sockaddr *ip,
 
             /* Send the client the welcome packet, or die trying. */
             if(send_dc_welcome(rv, server_seed_dc, client_seed_dc)) {
+                close(sock);
+                free(rv);
+                return NULL;
+            }
+
+            break;
+
+        case CLIENT_TYPE_BB_LOGIN:
+        case CLIENT_TYPE_BB_CHARACTER:
+            /* Generate the encryption keys for the client and server. */
+            for(i = 0; i < 48; i += 4) {
+                client_seed_dc = genrand_int32();
+                server_seed_dc = genrand_int32();
+
+                client_seed_bb[i + 0] = (uint8_t)(client_seed_dc >>  0);
+                client_seed_bb[i + 1] = (uint8_t)(client_seed_dc >>  8);
+                client_seed_bb[i + 2] = (uint8_t)(client_seed_dc >> 16);
+                client_seed_bb[i + 3] = (uint8_t)(client_seed_dc >> 24);
+                server_seed_bb[i + 0] = (uint8_t)(server_seed_dc >>  0);
+                server_seed_bb[i + 1] = (uint8_t)(server_seed_dc >>  8);
+                server_seed_bb[i + 2] = (uint8_t)(server_seed_dc >> 16);
+                server_seed_bb[i + 3] = (uint8_t)(server_seed_dc >> 24);
+            }
+
+            CRYPT_CreateKeys(&rv->server_cipher, server_seed_bb,
+                             CRYPT_BLUEBURST);
+            CRYPT_CreateKeys(&rv->client_cipher, client_seed_bb,
+                             CRYPT_BLUEBURST);
+            rv->hdr_size = 8;
+
+            /* Send the client the welcome packet, or die trying. */
+            if(send_bb_welcome(rv, server_seed_bb, client_seed_bb)) {
                 close(sock);
                 free(rv);
                 return NULL;
@@ -216,6 +250,11 @@ int read_from_client(login_client_t *c) {
                 case CLIENT_TYPE_PC:
                     pkt_sz = LE16(c->pkt.pc.pkt_len);
                     break;
+
+                case CLIENT_TYPE_BB_LOGIN:
+                case CLIENT_TYPE_BB_CHARACTER:
+                    pkt_sz = LE16(c->pkt.bb.pkt_len);
+                    break;
             }
 
             /* We'll always need a multiple of 8 or 4 (depending on the type of
@@ -238,6 +277,14 @@ int read_from_client(login_client_t *c) {
                     case CLIENT_TYPE_GC:
                     case CLIENT_TYPE_EP3:
                         rv = process_dclogin_packet(c, rbp);
+                        break;
+
+                    case CLIENT_TYPE_BB_LOGIN:
+                        rv = process_bblogin_packet(c, rbp);
+                        break;
+
+                    case CLIENT_TYPE_BB_CHARACTER:
+                        rv = process_bbcharacter_packet(c, rbp);
                         break;
                 }
 

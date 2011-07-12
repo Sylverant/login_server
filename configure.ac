@@ -43,6 +43,7 @@ MYSQL_CLIENT()
 MYSQL_LIBS="`mysql_config --libs`"
 
 AC_SUBST(MYSQL_LIBS)
+AC_CHECK_LIB([crypto], [SHA256], , AC_MSG_ERROR([libcrypto with SHA256 support is required!]))
 AC_CHECK_LIB([sylverant], [sylverant_read_config], , AC_MSG_ERROR([libsylverant is required!]))
 AC_CHECK_LIB([mini18n], [mini18n_get], , AC_MSG_WARN([Internationalization support requires mini18n]))
 

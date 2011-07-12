@@ -1,7 +1,7 @@
 #  
 #   This file is part of Sylverant PSO Server.
 #  
-#   Copyright (C) 2009 Lawrence Sebald
+#   Copyright (C) 2009, 2011 Lawrence Sebald
 #  
 #   This program is free software: you can redistribute it and/or modify
 #   it under the terms of the GNU Affero General Public License version 3
@@ -22,7 +22,7 @@ LIBS += $(MYSQL_LIBS) $(LIBICONV)
 bin_PROGRAMS = login_server
 login_server_SOURCES = src/dclogin.c src/login.c src/login.h \
                        src/login_packets.c src/login_packets.h \
-                       src/login_server.c
+                       src/login_server.c src/bblogin.c src/bbcharacter.c
 
 datarootdir = @datarootdir@
 

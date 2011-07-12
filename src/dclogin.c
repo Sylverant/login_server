@@ -44,9 +44,8 @@ static mini18n_t langs[CLIENT_LANG_COUNT];
 extern sylverant_dbconn_t conn;
 extern sylverant_quest_list_t qlist[CLIENT_TYPE_COUNT][CLIENT_LANG_COUNT];
 extern sylverant_limits_t *limits;
-extern int ship_transfer(login_client_t *c, uint32_t shipid);
 
-static void print_packet(unsigned char *pkt, int len) {
+void print_packet(unsigned char *pkt, int len) {
     unsigned char *pos = pkt, *row = pkt;
     int line = 0, type = 0;
 
@@ -994,6 +993,11 @@ int process_dclogin_packet(login_client_t *c, void *pkt) {
 
         case GAME_COMMAND0_TYPE:
             /* XXXX: Added so screenshots work on the ship list... */
+            return 0;
+
+        case TYPE_05:
+            /* XXXX: Why would you ask to disconnect? */
+            c->disconnected = 1;
             return 0;
 
         case EP3_RANK_UPDATE_TYPE:

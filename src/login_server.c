@@ -49,12 +49,14 @@
 #define NUM_GCSOCKS  3
 #define NUM_EP3SOCKS 3
 #define NUM_WEBSOCKS 1
+#define NUM_BBSOCKS  2
 #else
 #define NUM_DCSOCKS  4
 #define NUM_PCSOCKS  2
 #define NUM_GCSOCKS  6
 #define NUM_EP3SOCKS 6
 #define NUM_WEBSOCKS 2
+#define NUM_BBSOCKS  4
 #endif
 
 static const int dcports[NUM_DCSOCKS][2] = {
@@ -99,6 +101,15 @@ static const int webports[NUM_WEBSOCKS][2] = {
     { AF_INET , 10003 },
 #ifdef ENABLE_IPV6
     { AF_INET6, 10003 }
+#endif
+};
+
+static const int bbports[NUM_BBSOCKS][2] = {
+    { AF_INET , 12000 },
+    { AF_INET , 12001 },
+#ifdef ENABLE_IPV6
+    { AF_INET6, 12000 },
+    { AF_INET6, 12001 }
 #endif
 };
 
@@ -205,6 +216,15 @@ static void load_config() {
         }
     }
 
+    /* Read the Blue Burst param data */
+    if(load_param_data()) {
+        exit(EXIT_FAILURE);
+    }
+
+    if(load_bb_char_data()) {
+        exit(EXIT_FAILURE);
+    }
+
     debug(DBG_LOG, "Connecting to the database...\n");
 
     if(sylverant_db_open(&cfg->dbcfg, &conn)) {
@@ -241,7 +261,12 @@ int ship_transfer(login_client_t *c, uint32_t shipid) {
     }
 
     /* Grab the data from the row */
-    port = (uint16_t)strtoul(row[1], NULL, 0) + c->type;
+    if(c->type != CLIENT_TYPE_BB_CHARACTER) {
+        port = (uint16_t)strtoul(row[1], NULL, 0) + c->type;
+    }
+    else {
+        port = (uint16_t)strtoul(row[1], NULL, 0) + 4;
+    }
 
 #ifdef ENABLE_IPV6
     if(row[2] && row[3]) {
@@ -302,14 +327,14 @@ static const void *my_ntop(struct sockaddr_storage *addr,
 
 static void run_server(int dcsocks[NUM_DCSOCKS], int pcsocks[NUM_PCSOCKS],
                        int gcsocks[NUM_GCSOCKS], int websocks[NUM_WEBSOCKS],
-                       int ep3socks[NUM_EP3SOCKS]) {
+                       int ep3socks[NUM_EP3SOCKS], int bbsocks[NUM_BBSOCKS]) {
     fd_set readfds, writefds;
     struct timeval timeout;
     socklen_t len;
     struct sockaddr_storage addr;
     struct sockaddr *addr_p = (struct sockaddr *)&addr;
     char ipstr[INET6_ADDRSTRLEN];
-    int nfds, asock, j;
+    int nfds, asock, j, type;
     login_client_t *i, *tmp;
     ssize_t sent;
     uint32_t client_count;
@@ -355,6 +380,11 @@ static void run_server(int dcsocks[NUM_DCSOCKS], int pcsocks[NUM_PCSOCKS],
         for(j = 0; j < NUM_PCSOCKS; ++j) {
             FD_SET(pcsocks[j], &readfds);
             nfds = nfds > pcsocks[j] ? nfds : pcsocks[j];
+        }
+
+        for(j = 0; j < NUM_BBSOCKS; ++j) {
+            FD_SET(bbsocks[j], &readfds);
+            nfds = nfds > bbsocks[j] ? nfds : bbsocks[j];
         }
 
         for(j = 0; j < NUM_WEBSOCKS; ++j) {
@@ -441,6 +471,34 @@ static void run_server(int dcsocks[NUM_DCSOCKS], int pcsocks[NUM_PCSOCKS],
 
                     if(!create_connection(asock, CLIENT_TYPE_EP3, addr_p,
                                           len)) {
+                        close(asock);
+                    }
+                    else {
+                        ++client_count;
+                    }
+                }
+            }
+
+            for(j = 0; j < NUM_BBSOCKS; ++j) {
+                if(FD_ISSET(bbsocks[j], &readfds)) {
+                    len = sizeof(struct sockaddr_storage);
+
+                    if((asock = accept(bbsocks[j], addr_p, &len)) < 0) {
+                        perror("accept");
+                    }
+
+                    my_ntop(&addr, ipstr);
+                    debug(DBG_LOG, "Accepted Blue Burst connection from %s\n",
+                          ipstr);
+
+                    if(j & 1) {
+                        type = CLIENT_TYPE_BB_CHARACTER;
+                    }
+                    else {
+                        type = CLIENT_TYPE_BB_LOGIN;
+                    }
+
+                    if(!create_connection(asock, type, addr_p, len)) {
                         close(asock);
                     }
                     else {
@@ -618,6 +676,7 @@ int main(int argc, char *argv[]) {
     int pcsocks[NUM_PCSOCKS];
     int gcsocks[NUM_GCSOCKS];
     int ep3socks[NUM_EP3SOCKS];
+    int bbsocks[NUM_BBSOCKS];
     int websocks[NUM_WEBSOCKS];
 
     chdir(sylverant_directory);
@@ -684,6 +743,17 @@ int main(int argc, char *argv[]) {
         }
     }
 
+    debug(DBG_LOG, "Opening Blue Burst ports for connections.\n");
+
+    for(i = 0; i < NUM_BBSOCKS; ++i) {
+        bbsocks[i] = open_sock(bbports[i][0], bbports[i][1]);
+
+        if(bbsocks[i] < 0) {
+            sylverant_db_close(&conn);
+            exit(EXIT_FAILURE);
+        }
+    }
+
     debug(DBG_LOG, "Opening Web access ports for connections.\n");
 
     for(i = 0; i < NUM_WEBSOCKS; ++i) {
@@ -696,7 +766,7 @@ int main(int argc, char *argv[]) {
     }
 
     /* Run the login server. */
-    run_server(dcsocks, pcsocks, gcsocks, websocks, ep3socks);
+    run_server(dcsocks, pcsocks, gcsocks, websocks, ep3socks, bbsocks);
 
     /* Clean up. */
     for(i = 0; i < NUM_DCSOCKS; ++i) {
@@ -713,6 +783,10 @@ int main(int argc, char *argv[]) {
 
     for(i = 0; i < NUM_EP3SOCKS; ++i) {
         close(ep3socks[i]);
+    }
+
+    for(i = 0; i < NUM_BBSOCKS; ++i) {
+        close(bbsocks[i]);
     }
 
     for(i = 0; i < NUM_WEBSOCKS; ++i) {

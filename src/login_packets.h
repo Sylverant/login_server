@@ -18,13 +18,14 @@
 #ifndef LOGIN_PACKETS_H
 #define LOGIN_PACKETS_H
 
-#include <inttypes.h>
+#include <stdint.h>
 #include <netinet/in.h>
 
 #include <sylverant/encryption.h>
 #include <sylverant/quest.h>
 
 #include "login.h"
+#include "player.h"
 #include "packets.h"
 
 #define MENU_ID_INITIAL         0x00000000
@@ -47,12 +48,23 @@ const static char login_dc_welcome_copyright[] =
 /* Send a Dreamcast Welcome packet to the given client. */
 int send_dc_welcome(login_client_t *c, uint32_t svect, uint32_t cvect);
 
+/* Send a Blue Burst Welcome packet to the given client. */
+int send_bb_welcome(login_client_t *c, const uint8_t svect[48],
+                    const uint8_t cvect[48]);
+
 /* Send a large message packet to the given client. */
 int send_large_msg(login_client_t *c, const char msg[]);
 
+/* Send a scrolling message packet to the given client. */
+int send_scroll_msg(login_client_t *c, const char msg[]);
+
 /* Send the Dreamcast security packet to the given client. */
-int send_dc_security(login_client_t *c, uint32_t gc, uint8_t *data,
+int send_dc_security(login_client_t *c, uint32_t gc, const void *data,
                      int data_len);
+
+/* Send the Blue Burst security packet to the given client. */
+int send_bb_security(login_client_t *c, uint32_t gc, uint32_t err,
+                     uint32_t team, const void *data, int data_len);
 
 /* Send a redirect packet to the given client. */
 int send_redirect(login_client_t *c, in_addr_t ip, uint16_t port);
@@ -94,5 +106,27 @@ int send_ep3_rank_update(login_client_t *c);
 
 /* Send the Episode 3 card list to a client. */
 int send_ep3_card_update(login_client_t *c);
+
+/* Send a Blue Burst option reply to the client. */
+int send_bb_option_reply(login_client_t *c, const uint8_t keys[420]);
+
+/* Send a Blue Burst character acknowledgement to the client. */
+int send_bb_char_ack(login_client_t *c, uint8_t slot, uint8_t code);
+
+/* Send a Blue Burst checksum acknowledgement to the client. */
+int send_bb_checksum_ack(login_client_t *c, uint32_t ack);
+
+/* Send a Blue Burst guildcard header packet. */
+int send_bb_guild_header(login_client_t *c, uint32_t checksum);
+
+/* Send a Blue Burst guildcard chunk packet. */
+int send_bb_guild_chunk(login_client_t *c, uint32_t chunk);
+
+/* Send a prepared Blue Burst packet. */
+int send_bb_pkt(login_client_t *c, bb_pkt_hdr_t *hdr);
+
+/* Send a Blue Burst character preview packet. */
+int send_bb_char_preview(login_client_t *c, const sylverant_bb_mini_char_t *mc,
+                         uint8_t slot);
 
 #endif /* !LOGIN_PACKETS_H */
