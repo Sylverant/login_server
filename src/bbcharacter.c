@@ -35,14 +35,6 @@
 #include "packets.h"
 #include "login_packets.h"
 
-#ifdef HAVE_LIBMINI18N
-#include <mini18n-multi.h>
-#define __(c, s) mini18n_get(langs[c->language_code], s)
-static mini18n_t langs[CLIENT_LANG_COUNT];
-#else
-#define __(c, s) s
-#endif
-
 /* Default key configuration for Blue Burst clients... */
 const static uint8_t default_keys[420] = {
     0x00, 0x00, 0x00, 0x00, 0x26, 0x00, 0x00, 0x00, 0x00, 0x00,

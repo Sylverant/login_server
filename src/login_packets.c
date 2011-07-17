@@ -22,6 +22,7 @@
 #include <errno.h>
 #include <iconv.h>
 #include <ctype.h>
+#include <stdarg.h>
 #include <sys/time.h>
 #include <sys/socket.h>
 
@@ -627,16 +628,58 @@ static int send_initial_menu_pc(login_client_t *c) {
     return crypt_send(c, 0x88);
 }
 
+static int send_initial_menu_gc(login_client_t *c) {
+    dc_ship_list_pkt *pkt = (dc_ship_list_pkt *)sendbuf;
+    
+    /* Clear the base packet */
+    memset(pkt, 0, 0x0074);
+    
+    /* Fill in some basic stuff */
+    pkt->hdr.pkt_type = BLOCK_LIST_TYPE;
+    pkt->hdr.flags = 0x03;
+    pkt->hdr.pkt_len = LE16(0x0074);
+    
+    /* Fill in the "DATABASE/US" entry */
+    pkt->entries[0].menu_id = LE32(MENU_ID_DATABASE);
+    pkt->entries[0].item_id = 0;
+    pkt->entries[0].flags = LE16(0x0004);
+    strcpy(pkt->entries[0].name, "DATABASE/US");
+    pkt->entries[0].name[0x11] = 0x08;
+    
+    /* Fill in the "Ship Select" entry */
+    pkt->entries[1].menu_id = LE32(MENU_ID_INITIAL);
+    pkt->entries[1].item_id = LE32(ITEM_ID_INIT_SHIP);
+    pkt->entries[1].flags = LE16(0x0004);
+    strcpy(pkt->entries[1].name, "Ship Select");
+    
+    /* Fill in the "Download" entry */
+    pkt->entries[2].menu_id = LE32(MENU_ID_INITIAL);
+    pkt->entries[2].item_id = LE32(ITEM_ID_INIT_DOWNLOAD);
+    pkt->entries[2].flags = LE16(0x0F04);
+    strcpy(pkt->entries[2].name, "Download");
+
+    /* Fill in the "Information" entry */
+    pkt->entries[3].menu_id = LE32(MENU_ID_INITIAL);
+    pkt->entries[3].item_id = LE32(ITEM_ID_INIT_INFO);
+    pkt->entries[3].flags = LE16(0x0004);
+    strcpy(pkt->entries[3].name, "Information");
+    
+    /* Send the packet away */
+    return crypt_send(c, 0x74);
+}
+
 int send_initial_menu(login_client_t *c) {
     /* Call the appropriate function */
     switch(c->type) {
         case CLIENT_TYPE_DC:
-        case CLIENT_TYPE_GC:
-        case CLIENT_TYPE_EP3:
             return send_initial_menu_dc(c);
 
         case CLIENT_TYPE_PC:
             return send_initial_menu_pc(c);
+
+        case CLIENT_TYPE_GC:
+        case CLIENT_TYPE_EP3:
+            return send_initial_menu_gc(c);
     }
 
     return -1;
@@ -1859,4 +1902,174 @@ int send_bb_char_preview(login_client_t *c, const sylverant_bb_mini_char_t *mc,
     memcpy(&pkt->data, mc, sizeof(sylverant_bb_mini_char_t));
     
     return crypt_send(c, sizeof(bb_char_preview_pkt));
+}
+
+/* Send the content of the "Information" menu. */
+static int send_gc_info_list(login_client_t *c, uint32_t ver) {
+    dc_block_list_pkt *pkt = (dc_block_list_pkt *)sendbuf;
+    int i, len = 0x20, entries = 1;
+
+    /* Clear the base packet */
+    memset(pkt, 0, sizeof(dc_block_list_pkt));
+
+    /* Fill in some basic stuff */
+    pkt->hdr.pkt_type = BLOCK_LIST_TYPE;
+
+    /* Fill in the DATABASE entry */
+    memset(&pkt->entries[0], 0, 0x1C);
+    pkt->entries[0].menu_id = LE32(MENU_ID_DATABASE);
+    pkt->entries[0].item_id = 0;
+    pkt->entries[0].flags = LE16(0x0004);
+    strcpy(pkt->entries[0].name, "DATABASE/US");
+    pkt->entries[0].name[0x11] = 0x08;
+
+    /* Add each info item to the list. */
+    for(i = 0; i < cfg->info_file_count; ++i) {
+        /* See if we should look at this entry. */
+        if(!(cfg->info_files[i].versions & ver)) {
+            continue;
+        }
+
+        /* Clear out the info file information */
+        memset(&pkt->entries[entries], 0, 0x1C);
+
+        /* Fill in what we have */
+        pkt->entries[entries].menu_id = LE32(MENU_ID_INFODESK);
+        pkt->entries[entries].item_id = LE32(i);
+        pkt->entries[entries].flags = LE16(0x0000);
+
+        /* These are always ASCII, so this is fine */
+        strncpy(pkt->entries[entries].name, cfg->info_files[i].desc, 0x11);
+        pkt->entries[entries].name[0x11] = 0;
+
+        len += 0x1C;
+        ++entries;
+    }
+
+    /* Add the entry to return to the initial menu. */
+    memset(&pkt->entries[entries], 0, 0x1C);
+
+    pkt->entries[entries].menu_id = LE32(MENU_ID_INFODESK);
+    pkt->entries[entries].item_id = LE32(0xFFFFFFFF);
+    pkt->entries[entries].flags = LE16(0x0000);
+
+    strcpy(pkt->entries[entries].name, "Main Menu");
+    len += 0x1C;
+
+    /* Fill in the rest of the header */
+    pkt->hdr.pkt_len = LE16(len);
+    pkt->hdr.flags = (uint8_t)(entries);
+
+    /* Send the packet away */
+    return crypt_send(c, len);
+}
+
+int send_info_list(login_client_t *c) {
+    /* Call the appropriate function */
+    switch(c->type) {
+        case CLIENT_TYPE_GC:
+            return send_gc_info_list(c, SYLVERANT_INFO_GC);
+
+        case CLIENT_TYPE_EP3:
+            return send_gc_info_list(c, SYLVERANT_INFO_EP3);
+    }
+
+    return -1;
+}
+
+/* Send a message to the client. */
+static int send_gc_message_box(login_client_t *c, const char *fmt,
+                               va_list args) {
+    dc_msg_box_pkt *pkt = (dc_msg_box_pkt *)sendbuf;
+    int len;
+
+    /* Do the formatting */
+    vsnprintf(pkt->msg, 1024, fmt, args);
+    pkt->msg[1024] = '\0';
+    len = strlen(pkt->msg) + 1;
+
+    /* Make sure we have a language code tag */
+    if(pkt->msg[0] != '\t' || (pkt->msg[1] != 'E' && pkt->msg[1] != 'J')) {
+        /* Assume Non-Japanese if we don't have a marker. */
+        memmove(&pkt->msg[2], &pkt->msg[0], len);
+        pkt->msg[0] = '\t';
+        pkt->msg[1] = 'E';
+        len += 2;
+    }
+
+    /* Add any padding needed */
+    while(len & 0x03) {
+        pkt->msg[len++] = 0;
+    }
+
+    /* Fill in the header */
+    len += 0x04;
+
+    pkt->hdr.dc.pkt_type = GC_MSG_BOX_TYPE;
+    pkt->hdr.dc.flags = 0;
+    pkt->hdr.dc.pkt_len = LE16(len);
+
+    /* Send it away */
+    return crypt_send(c, len);
+}
+
+int send_message_box(login_client_t *c, const char *fmt, ...) {
+    va_list args;
+    int rv = -1;
+
+    va_start(args, fmt);
+
+    /* Call the appropriate function. */
+    switch(c->type) {
+        case CLIENT_TYPE_GC:
+        case CLIENT_TYPE_EP3:
+            rv = send_gc_message_box(c, fmt, args);
+    }
+
+    va_end(args);
+
+    return rv;
+}
+
+/* Send a message box containing an information file entry. */
+int send_info_file(login_client_t *c, uint32_t entry) {
+    FILE *fp;
+    char buf[1024];
+    long len;
+
+    /* The item_id should be the information the client wants. */
+    if(entry >= cfg->info_file_count) {
+        send_message_box(c, "%s\n%s",
+                         __(c, "\tE\tC4Something went wrong!"),
+                         __(c, "\tC7The information requested is missing."));
+        return 0;
+    }
+
+    /* Attempt to open the file */
+    fp = fopen(cfg->info_files[entry].filename, "r");
+
+    if(!fp) {
+        send_message_box(c, "%s\n%s",
+                         __(c, "\tE\tC4Something went wrong!"),
+                         __(c, "\tC7The information requested is missing."));
+        return 0;
+    }
+
+    /* Figure out the length of the file. */
+    fseek(fp, 0, SEEK_END);
+    len = ftell(fp);
+    fseek(fp, 0, SEEK_SET);
+
+    /* Truncate to about 1KB */
+    if(len > 1023) {
+        len = 1023;
+    }
+
+    /* Read the file in. */
+    fread(buf, 1, len, fp);
+    fclose(fp);
+    buf[len] = 0;
+
+    /* Send the message to the client. */
+    return send_message_box(c, "%s", buf);
 }

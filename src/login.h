@@ -190,4 +190,12 @@ int load_param_data(void);
 void cleanup_param_data(void);
 int load_bb_char_data(void);
 
+#ifdef HAVE_LIBMINI18N
+#include <mini18n-multi.h>
+#define __(c, s) mini18n_get(langs[c->language_code], s)
+extern mini18n_t langs[CLIENT_LANG_COUNT];
+#else
+#define __(c, s) s
+#endif
+
 #endif /* !LOGIN_H */

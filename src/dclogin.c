@@ -33,13 +33,7 @@
 #include "player.h"
 #include "login_packets.h"
 
-#ifdef HAVE_LIBMINI18N
-#include <mini18n-multi.h>
-#define __(c, s) mini18n_get(langs[c->language_code], s)
-static mini18n_t langs[CLIENT_LANG_COUNT];
-#else
-#define __(c, s) s
-#endif
+mini18n_t langs[CLIENT_LANG_COUNT];
 
 extern sylverant_dbconn_t conn;
 extern sylverant_quest_list_t qlist[CLIENT_TYPE_COUNT][CLIENT_LANG_COUNT];
@@ -759,6 +753,9 @@ static int handle_ship_select(login_client_t *c, dc_select_pkt *pkt) {
                     return send_quest_list(c, &l->cats[0]);
                 }
             }
+            else if(item_id == ITEM_ID_INIT_INFO) {
+                return send_info_list(c);
+            }
 
             return -1;
 
@@ -787,6 +784,15 @@ static int handle_ship_select(login_client_t *c, dc_select_pkt *pkt) {
             }
             else {
                 return -1;
+            }
+
+        /* Information Desk */
+        case 0x07:
+            if(item_id == 0xFFFFFFFF) {
+                return send_initial_menu(c);
+            }
+            else {
+                return send_info_file(c, item_id);
             }
 
         default:
@@ -1004,6 +1010,11 @@ int process_dclogin_packet(login_client_t *c, void *pkt) {
         case EP3_CARD_UPDATE_TYPE:
             /* XXXX: I have no idea what to do with these... */
             return 0;
+
+        case GC_MSG_BOX_CLOSED_TYPE:
+            /* XXXX: This will need work if I ever have an initial MOTD or
+               something like that. */
+            return send_info_list(c);
 
         default:
             print_packet((unsigned char *)pkt, len);

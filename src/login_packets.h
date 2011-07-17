@@ -31,10 +31,12 @@
 #define MENU_ID_INITIAL         0x00000000
 #define MENU_ID_SHIP            0x00000001
 #define MENU_ID_QUEST           0x00000004
+#define MENU_ID_INFODESK        0x00000007
 #define MENU_ID_DATABASE        0x00040000
 
 #define ITEM_ID_INIT_SHIP       0x00000000
 #define ITEM_ID_INIT_DOWNLOAD   0x00000001
+#define ITEM_ID_INIT_INFO       0x00000002
 
 /* This must be placed into the copyright field in the BB welcome packet. */
 const static char login_bb_welcome_copyright[] =
@@ -128,5 +130,14 @@ int send_bb_pkt(login_client_t *c, bb_pkt_hdr_t *hdr);
 /* Send a Blue Burst character preview packet. */
 int send_bb_char_preview(login_client_t *c, const sylverant_bb_mini_char_t *mc,
                          uint8_t slot);
+
+/* Send the content of the "Information" menu. */
+int send_info_list(login_client_t *c);
+
+/* Send a message box packet to the user. */
+int send_message_box(login_client_t *c, const char *fmt, ...);
+
+/* Send a message box containing an information file entry. */
+int send_info_file(login_client_t *c, uint32_t entry);
 
 #endif /* !LOGIN_PACKETS_H */
