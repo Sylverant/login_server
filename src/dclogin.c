@@ -741,7 +741,7 @@ static int handle_ship_select(login_client_t *c, dc_select_pkt *pkt) {
     uint32_t item_id = LE32(pkt->item_id);
     int rv;
 
-    switch(menu_id) {
+    switch(menu_id & 0x000000FF) {
         /* Initial menu */
         case MENU_ID_INITIAL:
             if(item_id == ITEM_ID_INIT_SHIP) {

@@ -32,7 +32,7 @@
 #define MENU_ID_SHIP            0x00000001
 #define MENU_ID_QUEST           0x00000004
 #define MENU_ID_GM              0x00000007
-#define MENU_ID_INFODESK        0x80000000
+#define MENU_ID_INFODESK        0x000000FF
 #define MENU_ID_DATABASE        0x00040000
 
 #define ITEM_ID_INIT_SHIP       0x00000000
