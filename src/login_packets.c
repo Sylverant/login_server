@@ -562,14 +562,10 @@ int send_timestamp(login_client_t *c) {
    "Download". */
 static int send_initial_menu_dc(login_client_t *c) {
     dc_ship_list_pkt *pkt = (dc_ship_list_pkt *)sendbuf;
+    int len = 0x58, count = 2;
 
     /* Clear the base packet */
-    memset(pkt, 0, 0x0058);
-
-    /* Fill in some basic stuff */
-    pkt->hdr.pkt_type = BLOCK_LIST_TYPE;
-    pkt->hdr.flags = 0x02;
-    pkt->hdr.pkt_len = LE16(0x0058);
+    memset(pkt, 0, 0x0074);
 
     /* Fill in the "DATABASE/US" entry */
     pkt->entries[0].menu_id = LE32(MENU_ID_DATABASE);
@@ -590,20 +586,31 @@ static int send_initial_menu_dc(login_client_t *c) {
     pkt->entries[2].flags = LE16(0x0F04);
     strcpy(pkt->entries[2].name, "Download");
 
+    /* If the user is a GM, give them a bit more... */
+    if(c->is_gm) {
+        pkt->entries[3].menu_id = LE32(MENU_ID_INITIAL);
+        pkt->entries[3].item_id = LE32(ITEM_ID_INIT_GM);
+        pkt->entries[3].flags = LE16(0x0004);
+        strcpy(pkt->entries[3].name, "GM Operations");
+        ++count;
+        len += 0x1C;
+    }
+
+    /* Fill in some basic stuff */
+    pkt->hdr.pkt_type = BLOCK_LIST_TYPE;
+    pkt->hdr.flags = count;
+    pkt->hdr.pkt_len = LE16(len);
+
     /* Send the packet away */
-    return crypt_send(c, 0x58);
+    return crypt_send(c, len);
 }
 
 static int send_initial_menu_pc(login_client_t *c) {
     pc_ship_list_pkt *pkt = (pc_ship_list_pkt *)sendbuf;
+    int len = 0x88, count = 2;
 
     /* Clear the base packet */
-    memset(pkt, 0, 0x0088);
-
-    /* Fill in some basic stuff */
-    pkt->hdr.pkt_type = BLOCK_LIST_TYPE;
-    pkt->hdr.flags = 0x02;
-    pkt->hdr.pkt_len = LE16(0x0088);
+    memset(pkt, 0, 0x00B4);
 
     /* Fill in the "DATABASE/US" entry */
     pkt->entries[0].menu_id = LE32(MENU_ID_DATABASE);
@@ -624,20 +631,32 @@ static int send_initial_menu_pc(login_client_t *c) {
     pkt->entries[2].flags = LE16(0x0F04);
     memcpy(pkt->entries[2].name, "D\0o\0w\0n\0l\0o\0a\0d\0", 16);
 
+    /* If the user is a GM, give them a bit more... */
+    if(c->is_gm) {
+        pkt->entries[3].menu_id = LE32(MENU_ID_INITIAL);
+        pkt->entries[3].item_id = LE32(ITEM_ID_INIT_GM);
+        pkt->entries[3].flags = LE16(0x0004);
+        memcpy(pkt->entries[3].name, "G\0M\0 \0O\0p\0e\0r\0a\0t\0i\0o\0n\0s\0",
+               26);
+        ++count;
+        len += 0x2C;
+    }
+
+    /* Fill in some basic stuff */
+    pkt->hdr.pkt_type = BLOCK_LIST_TYPE;
+    pkt->hdr.flags = count;
+    pkt->hdr.pkt_len = LE16(len);
+
     /* Send the packet away */
-    return crypt_send(c, 0x88);
+    return crypt_send(c, len);
 }
 
 static int send_initial_menu_gc(login_client_t *c) {
     dc_ship_list_pkt *pkt = (dc_ship_list_pkt *)sendbuf;
+    int count = 3, len = 0x74;
     
     /* Clear the base packet */
-    memset(pkt, 0, 0x0074);
-    
-    /* Fill in some basic stuff */
-    pkt->hdr.pkt_type = BLOCK_LIST_TYPE;
-    pkt->hdr.flags = 0x03;
-    pkt->hdr.pkt_len = LE16(0x0074);
+    memset(pkt, 0, 0x0090);
     
     /* Fill in the "DATABASE/US" entry */
     pkt->entries[0].menu_id = LE32(MENU_ID_DATABASE);
@@ -663,9 +682,24 @@ static int send_initial_menu_gc(login_client_t *c) {
     pkt->entries[3].item_id = LE32(ITEM_ID_INIT_INFO);
     pkt->entries[3].flags = LE16(0x0004);
     strcpy(pkt->entries[3].name, "Information");
+
+    /* If the user is a GM, give them a bit more... */
+    if(c->is_gm) {
+        pkt->entries[3].menu_id = LE32(MENU_ID_INITIAL);
+        pkt->entries[3].item_id = LE32(ITEM_ID_INIT_GM);
+        pkt->entries[3].flags = LE16(0x0004);
+        strcpy(pkt->entries[3].name, "GM Operations");
+        ++count;
+        len += 0x1C;
+    }
+
+    /* Fill in some basic stuff */
+    pkt->hdr.pkt_type = BLOCK_LIST_TYPE;
+    pkt->hdr.flags = count;
+    pkt->hdr.pkt_len = LE16(len);
     
     /* Send the packet away */
-    return crypt_send(c, 0x74);
+    return crypt_send(c, len);
 }
 
 int send_initial_menu(login_client_t *c) {
@@ -2072,4 +2106,94 @@ int send_info_file(login_client_t *c, uint32_t entry) {
 
     /* Send the message to the client. */
     return send_message_box(c, "%s", buf);
+}
+
+/* Send the GM operations menu to the user. */
+static int send_gm_menu_dc(login_client_t *c) {
+    dc_ship_list_pkt *pkt = (dc_ship_list_pkt *)sendbuf;
+    int len = 0x58, count = 2;
+
+    /* Clear the base packet */
+    memset(pkt, 0, 0x0058);
+
+    /* Fill in the "DATABASE/US" entry */
+    pkt->entries[0].menu_id = LE32(MENU_ID_DATABASE);
+    pkt->entries[0].item_id = 0;
+    pkt->entries[0].flags = LE16(0x0004);
+    strcpy(pkt->entries[0].name, "DATABASE/US");
+    pkt->entries[0].name[0x11] = 0x08;
+
+    /* Add our entries... */
+    pkt->entries[1].menu_id = LE32(MENU_ID_GM);
+    pkt->entries[1].item_id = LE32(ITEM_ID_GM_REFRESH_Q);
+    pkt->entries[1].flags = LE16(0x0004);
+    strcpy(pkt->entries[1].name, "Refresh Quests");
+
+    pkt->entries[2].menu_id = LE32(MENU_ID_GM);
+    pkt->entries[2].item_id = LE32(0xFFFFFFFF);
+    pkt->entries[2].flags = LE16(0x0004);
+    strcpy(pkt->entries[2].name, "Main Menu");
+
+    /* Fill in some basic stuff */
+    pkt->hdr.pkt_type = BLOCK_LIST_TYPE;
+    pkt->hdr.flags = count;
+    pkt->hdr.pkt_len = LE16(len);
+
+    /* Send the packet away */
+    return crypt_send(c, len);
+}
+
+static int send_gm_menu_pc(login_client_t *c) {
+    pc_ship_list_pkt *pkt = (pc_ship_list_pkt *)sendbuf;
+    int len = 0x88, count = 2;
+
+    /* Clear the base packet */
+    memset(pkt, 0, 0x0088);
+
+    /* Fill in the "DATABASE/US" entry */
+    pkt->entries[0].menu_id = LE32(MENU_ID_DATABASE);
+    pkt->entries[0].item_id = 0;
+    pkt->entries[0].flags = LE16(0x0004);
+    memcpy(pkt->entries[0].name, "D\0A\0T\0A\0B\0A\0S\0E\0/\0U\0S\0", 22);
+    pkt->entries[0].name[0x11] = 0x08;
+
+    /* Add our entries... */
+    pkt->entries[1].menu_id = LE32(MENU_ID_GM);
+    pkt->entries[1].item_id = LE32(ITEM_ID_GM_REFRESH_Q);
+    pkt->entries[1].flags = LE16(0x0004);
+    memcpy(pkt->entries[1].name, "R\0e\0f\0r\0e\0s\0h\0 \0Q\0u\0e\0s\0t\0s\0",
+           28);
+
+    pkt->entries[2].menu_id = LE32(MENU_ID_GM);
+    pkt->entries[2].item_id = LE32(0xFFFFFFFF);
+    pkt->entries[2].flags = LE16(0x0F04);
+    memcpy(pkt->entries[2].name, "M\0a\0i\0n\0 \0M\0e\0n\0u\0", 18);
+
+    /* Fill in some basic stuff */
+    pkt->hdr.pkt_type = BLOCK_LIST_TYPE;
+    pkt->hdr.flags = count;
+    pkt->hdr.pkt_len = LE16(len);
+
+    /* Send the packet away */
+    return crypt_send(c, len);
+}
+
+int send_gm_menu(login_client_t *c) {
+    /* Make sure the user is actually a GM... */
+    if(!c->is_gm) {
+        return -1;
+    }
+
+    /* Call the appropriate function */
+    switch(c->type) {
+        case CLIENT_TYPE_DC:
+        case CLIENT_TYPE_GC:
+        case CLIENT_TYPE_EP3:
+            return send_gm_menu_dc(c);
+
+        case CLIENT_TYPE_PC:
+            return send_gm_menu_pc(c);
+    }
+
+    return -1;
 }

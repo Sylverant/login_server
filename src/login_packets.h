@@ -31,12 +31,16 @@
 #define MENU_ID_INITIAL         0x00000000
 #define MENU_ID_SHIP            0x00000001
 #define MENU_ID_QUEST           0x00000004
-#define MENU_ID_INFODESK        0x00000007
+#define MENU_ID_GM              0x00000007
+#define MENU_ID_INFODESK        0x80000000
 #define MENU_ID_DATABASE        0x00040000
 
 #define ITEM_ID_INIT_SHIP       0x00000000
 #define ITEM_ID_INIT_DOWNLOAD   0x00000001
 #define ITEM_ID_INIT_INFO       0x00000002
+#define ITEM_ID_INIT_GM         0x00000003
+
+#define ITEM_ID_GM_REFRESH_Q    0x00000000
 
 /* This must be placed into the copyright field in the BB welcome packet. */
 const static char login_bb_welcome_copyright[] =
@@ -139,5 +143,8 @@ int send_message_box(login_client_t *c, const char *fmt, ...);
 
 /* Send a message box containing an information file entry. */
 int send_info_file(login_client_t *c, uint32_t entry);
+
+/* Send the GM operations menu to the user. */
+int send_gm_menu(login_client_t *c);
 
 #endif /* !LOGIN_PACKETS_H */

@@ -741,9 +741,9 @@ static int handle_ship_select(login_client_t *c, dc_select_pkt *pkt) {
     uint32_t item_id = LE32(pkt->item_id);
     int rv;
 
-    switch(menu_id & 0xFF) {
+    switch(menu_id) {
         /* Initial menu */
-        case 0x00:
+        case MENU_ID_INITIAL:
             if(item_id == ITEM_ID_INIT_SHIP) {
                 /* Ship Select */
                 return send_ship_list(c, 0);
@@ -756,11 +756,14 @@ static int handle_ship_select(login_client_t *c, dc_select_pkt *pkt) {
             else if(item_id == ITEM_ID_INIT_INFO) {
                 return send_info_list(c);
             }
+            else if(item_id == ITEM_ID_INIT_GM) {
+                return send_gm_menu(c);
+            }
 
             return -1;
 
         /* Ship */
-        case 0x01:
+        case MENU_ID_SHIP:
             if(item_id == 0) {
                 /* A "Ship List" menu item */
                 return send_ship_list(c, (uint16_t)(menu_id >> 8));
@@ -771,7 +774,7 @@ static int handle_ship_select(login_client_t *c, dc_select_pkt *pkt) {
             }
 
         /* Quest */
-        case 0x04:
+        case MENU_ID_QUEST:
             /* Make sure the item is valid */
             if(item_id < l->cats[0].quest_count) {
                 rv = send_quest(c, &l->cats[0].quests[item_id]);
@@ -787,12 +790,31 @@ static int handle_ship_select(login_client_t *c, dc_select_pkt *pkt) {
             }
 
         /* Information Desk */
-        case 0x07:
+        case MENU_ID_INFODESK:
             if(item_id == 0xFFFFFFFF) {
                 return send_initial_menu(c);
             }
             else {
                 return send_info_file(c, item_id);
+            }
+
+        /* GM Operations */
+        case MENU_ID_GM:
+            /* Make sure the user is a GM, and not just messing with packets. */
+            if(!c->is_gm) {
+                return -1;
+            }
+
+            switch(item_id) {
+                case ITEM_ID_GM_REFRESH_Q:
+                    read_quests();
+                    return send_gm_menu(c);
+
+                case 0xFFFFFFFF:
+                    return send_initial_menu(c);
+
+                default:
+                    return -1;
             }
 
         default:

@@ -185,29 +185,46 @@ static void parse_command_line(int argc, char *argv[]) {
     }
 }
 
+void read_quests() {
+    int i, j;
+    char fn[512];
+    sylverant_quest_list_t tmp;
+    static int read_quests = 0;
+
+    debug(DBG_LOG, "Reading quests...\n");
+
+    if(cfg->quests_dir && cfg->quests_dir[0]) {
+        for(i = 0; i < CLIENT_TYPE_COUNT; ++i) {
+            for(j = 0; j < CLIENT_LANG_COUNT; ++j) {
+                sprintf(fn, "%s/%s-%s/quests.xml", cfg->quests_dir,
+                        type_codes[i], language_codes[j]);
+                if(!sylverant_quests_read(fn, &tmp)) {
+                    debug(DBG_LOG, "Read quests for %s-%s\n", type_codes[i],
+                          language_codes[j]);
+                }
+
+                /* Cleanup and move the new stuff in place. */
+                if(read_quests) {
+                    sylverant_quests_destroy(&qlist[i][j]);
+                }
+
+                qlist[i][j] = tmp;
+            }
+        }
+    }
+
+    read_quests = 1;
+}
+
 /* Load the configuration file. */
 static void load_config() {
-    char fn[512];
-    int i, j;
-
     if(sylverant_read_config(&cfg)) {
         debug(DBG_ERROR, "Cannot load configuration!\n");
         exit(EXIT_FAILURE);
     }
 
     /* Attempt to read each quests file... */
-    if(cfg->quests_dir && cfg->quests_dir[0]) {
-        for(i = 0; i < CLIENT_TYPE_COUNT; ++i) {
-            for(j = 0; j < CLIENT_LANG_COUNT; ++j) {
-                sprintf(fn, "%s/%s-%s/quests.xml", cfg->quests_dir,
-                        type_codes[i], language_codes[j]);
-                if(!sylverant_quests_read(fn, &qlist[i][j])) {
-                    debug(DBG_LOG, "Read quests for %s-%s\n", type_codes[i],
-                          language_codes[j]);
-                }
-            }
-        }
-    }
+    read_quests();
 
     /* Attempt to read the legit items list */
     if(cfg->limits_file && cfg->limits_file[0]) {

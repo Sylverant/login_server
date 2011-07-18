@@ -173,6 +173,7 @@ void disconnect_from_ships(uint32_t gcn);
 
 /* In login_server.c */
 int ship_transfer(login_client_t *c, uint32_t shipid);
+void read_quests();
 
 /* In dclogin.c */
 int process_dclogin_packet(login_client_t *c, void *pkt);
