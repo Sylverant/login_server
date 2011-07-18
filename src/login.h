@@ -117,6 +117,15 @@ typedef struct login_client {
     int hdr_read;
 } login_client_t;
 
+/* Privilege levels */
+#define CLIENT_PRIV_LOCAL_GM    0x01
+#define CLIENT_PRIV_GLOBAL_GM   0x02
+#define CLIENT_PRIV_LOCAL_ROOT  0x04
+#define CLIENT_PRIV_GLOBAL_ROOT 0x08
+
+#define IS_GLOBAL_GM(c)     (!!((c)->is_gm & CLIENT_PRIV_GLOBAL_GM))
+#define IS_GLOBAL_ROOT(c)   (!!((c)->is_gm & CLIENT_PRIV_GLOBAL_ROOT))
+
 /* Values for the type of the login_client_t */
 #define CLIENT_TYPE_DC              0
 #define CLIENT_TYPE_PC              1

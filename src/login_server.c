@@ -119,6 +119,7 @@ sylverant_config_t *cfg;
 sylverant_limits_t *limits = NULL;
 
 sylverant_quest_list_t qlist[CLIENT_TYPE_COUNT][CLIENT_LANG_COUNT];
+int shutting_down = 0;
 
 static int dont_daemonize = 0;
 
@@ -376,6 +377,12 @@ static void run_server(int dcsocks[NUM_DCSOCKS], int pcsocks[NUM_PCSOCKS],
 
             nfds = nfds > i->sock ? nfds : i->sock;
             ++client_count;
+        }
+
+        /* If we have a shutdown scheduled and nobody's connected, go ahead and
+           do it. */
+        if(!client_count && shutting_down) {
+            return;
         }
 
         /* Add the listening sockets for incoming connections to the fd_set. */
@@ -695,6 +702,18 @@ int main(int argc, char *argv[]) {
     int ep3socks[NUM_EP3SOCKS];
     int bbsocks[NUM_BBSOCKS];
     int websocks[NUM_WEBSOCKS];
+    char *initial_path;
+    long size;
+
+    /* Save the initial path, so that if /restart is used we'll be starting from
+       the same directory. */
+    size = pathconf(".", _PC_PATH_MAX);
+    if(!(initial_path = (char *)malloc(size))) {
+        debug(DBG_WARN, "Out of memory, bailing out!\n");
+    }
+    else if(!getcwd(initial_path, size)) {
+        debug(DBG_WARN, "Cannot save initial path, Restart may not work!\n");
+    }
 
     chdir(sylverant_directory);
 
@@ -820,6 +839,20 @@ int main(int argc, char *argv[]) {
 
     sylverant_free_config(cfg);
 	cleanup_i18n();
+
+    /* Restart if we're supposed to be doing so. */
+    if(shutting_down == 2) {
+        chdir(initial_path);
+        free(initial_path);
+        execvp(argv[0], argv);
+
+        /* This should never be reached, since execvp should replace us. If we
+           get here, there was a serious problem... */
+        debug(DBG_ERROR, "Restart failed: %s\n", strerror(errno));
+        return -1;
+    }
+
+    free(initial_path);
 
     return 0;
 }

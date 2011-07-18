@@ -39,6 +39,17 @@ extern sylverant_quest_list_t qlist[CLIENT_TYPE_COUNT][CLIENT_LANG_COUNT];
 
 uint8_t sendbuf[65536];
 
+static void ascii_to_utf16(const char *in, uint16_t *out, int maxlen) {
+    while(*in && maxlen) {
+        *out++ = LE16(*in++);
+        --maxlen;
+    }
+
+    while(maxlen--) {
+        *out++ = 0;
+    }
+}
+
 /* Send a raw packet away. */
 static int send_raw(login_client_t *c, int len) {
     ssize_t rv, total = 0;
@@ -587,7 +598,7 @@ static int send_initial_menu_dc(login_client_t *c) {
     strcpy(pkt->entries[2].name, "Download");
 
     /* If the user is a GM, give them a bit more... */
-    if(c->is_gm) {
+    if(IS_GLOBAL_GM(c)) {
         pkt->entries[3].menu_id = LE32(MENU_ID_INITIAL);
         pkt->entries[3].item_id = LE32(ITEM_ID_INIT_GM);
         pkt->entries[3].flags = LE16(0x0004);
@@ -632,7 +643,7 @@ static int send_initial_menu_pc(login_client_t *c) {
     memcpy(pkt->entries[2].name, "D\0o\0w\0n\0l\0o\0a\0d\0", 16);
 
     /* If the user is a GM, give them a bit more... */
-    if(c->is_gm) {
+    if(IS_GLOBAL_GM(c)) {
         pkt->entries[3].menu_id = LE32(MENU_ID_INITIAL);
         pkt->entries[3].item_id = LE32(ITEM_ID_INIT_GM);
         pkt->entries[3].flags = LE16(0x0004);
@@ -684,7 +695,7 @@ static int send_initial_menu_gc(login_client_t *c) {
     strcpy(pkt->entries[3].name, "Information");
 
     /* If the user is a GM, give them a bit more... */
-    if(c->is_gm) {
+    if(IS_GLOBAL_GM(c)) {
         pkt->entries[3].menu_id = LE32(MENU_ID_INITIAL);
         pkt->entries[3].item_id = LE32(ITEM_ID_INIT_GM);
         pkt->entries[3].flags = LE16(0x0004);
@@ -790,7 +801,7 @@ static int send_ship_list_dc(login_client_t *c, uint16_t menu_code) {
     while((row = sylverant_db_result_fetch(result))) {
         gm_only = atoi(row[3]);
 
-        if(!gm_only || c->is_gm) {
+        if(!gm_only || IS_GLOBAL_GM(c)) {
             /* Clear out the ship information */
             memset(&pkt->entries[num_ships], 0, 0x1C);
 
@@ -963,7 +974,7 @@ static int send_ship_list_pc(login_client_t *c, uint16_t menu_code) {
     while((row = sylverant_db_result_fetch(result))) {
         gm_only = atoi(row[3]);
 
-        if(!gm_only || c->is_gm) {
+        if(!gm_only || IS_GLOBAL_GM(c)) {
             /* Clear out the ship information */
             memset(&pkt->entries[num_ships], 0, 0x2C);
 
@@ -1157,7 +1168,7 @@ static int send_ship_list_bb(login_client_t *c, uint16_t menu_code) {
     while((row = sylverant_db_result_fetch(result))) {
         gm_only = atoi(row[3]);
 
-        if(!gm_only || c->is_gm) {
+        if(!gm_only || IS_GLOBAL_GM(c)) {
             /* Clear out the ship information */
             memset(&pkt->entries[num_ships], 0, 0x2C);
 
@@ -2111,32 +2122,51 @@ int send_info_file(login_client_t *c, uint32_t entry) {
 /* Send the GM operations menu to the user. */
 static int send_gm_menu_dc(login_client_t *c) {
     dc_ship_list_pkt *pkt = (dc_ship_list_pkt *)sendbuf;
-    int len = 0x58, count = 2;
-
-    /* Clear the base packet */
-    memset(pkt, 0, 0x0058);
+    int len = 0x04, count = 0;
 
     /* Fill in the "DATABASE/US" entry */
-    pkt->entries[0].menu_id = LE32(MENU_ID_DATABASE);
-    pkt->entries[0].item_id = 0;
-    pkt->entries[0].flags = LE16(0x0004);
-    strcpy(pkt->entries[0].name, "DATABASE/US");
-    pkt->entries[0].name[0x11] = 0x08;
+    pkt->entries[count].menu_id = LE32(MENU_ID_DATABASE);
+    pkt->entries[count].item_id = 0;
+    pkt->entries[count].flags = LE16(0x0004);
+    strncpy(pkt->entries[count].name, "DATABASE/US", 0x12);
+    pkt->entries[count].name[0x11] = 0x08;
+    ++count;
+    len += 0x1C;
 
     /* Add our entries... */
-    pkt->entries[1].menu_id = LE32(MENU_ID_GM);
-    pkt->entries[1].item_id = LE32(ITEM_ID_GM_REFRESH_Q);
-    pkt->entries[1].flags = LE16(0x0004);
-    strcpy(pkt->entries[1].name, "Refresh Quests");
+    pkt->entries[count].menu_id = LE32(MENU_ID_GM);
+    pkt->entries[count].item_id = LE32(ITEM_ID_GM_REFRESH_Q);
+    pkt->entries[count].flags = LE16(0x0004);
+    strncpy(pkt->entries[count].name, "Refresh Quests", 0x12);
+    ++count;
+    len += 0x1C;
 
-    pkt->entries[2].menu_id = LE32(MENU_ID_GM);
-    pkt->entries[2].item_id = LE32(0xFFFFFFFF);
-    pkt->entries[2].flags = LE16(0x0004);
-    strcpy(pkt->entries[2].name, "Main Menu");
+    if(IS_GLOBAL_ROOT(c)) {
+        pkt->entries[count].menu_id = LE32(MENU_ID_GM);
+        pkt->entries[count].item_id = LE32(ITEM_ID_GM_RESTART);
+        pkt->entries[count].flags = LE16(0x0004);
+        strncpy(pkt->entries[count].name, "Restart", 0x12);
+        ++count;
+        len += 0x1C;
+
+        pkt->entries[count].menu_id = LE32(MENU_ID_GM);
+        pkt->entries[count].item_id = LE32(ITEM_ID_GM_SHUTDOWN);
+        pkt->entries[count].flags = LE16(0x0004);
+        strncpy(pkt->entries[count].name, "Shutdown", 0x12);
+        ++count;
+        len += 0x1C;
+    }
+
+    pkt->entries[count].menu_id = LE32(MENU_ID_GM);
+    pkt->entries[count].item_id = LE32(0xFFFFFFFF);
+    pkt->entries[count].flags = LE16(0x0004);
+    strncpy(pkt->entries[count].name, "Main Menu", 0x12);
+    ++count;
+    len += 0x1C;
 
     /* Fill in some basic stuff */
     pkt->hdr.pkt_type = BLOCK_LIST_TYPE;
-    pkt->hdr.flags = count;
+    pkt->hdr.flags = (uint8_t)(count - 1);
     pkt->hdr.pkt_len = LE16(len);
 
     /* Send the packet away */
@@ -2145,33 +2175,51 @@ static int send_gm_menu_dc(login_client_t *c) {
 
 static int send_gm_menu_pc(login_client_t *c) {
     pc_ship_list_pkt *pkt = (pc_ship_list_pkt *)sendbuf;
-    int len = 0x88, count = 2;
-
-    /* Clear the base packet */
-    memset(pkt, 0, 0x0088);
+    int len = 0x04, count = 0;
 
     /* Fill in the "DATABASE/US" entry */
-    pkt->entries[0].menu_id = LE32(MENU_ID_DATABASE);
-    pkt->entries[0].item_id = 0;
-    pkt->entries[0].flags = LE16(0x0004);
-    memcpy(pkt->entries[0].name, "D\0A\0T\0A\0B\0A\0S\0E\0/\0U\0S\0", 22);
-    pkt->entries[0].name[0x11] = 0x08;
+    pkt->entries[count].menu_id = LE32(MENU_ID_DATABASE);
+    pkt->entries[count].item_id = 0;
+    pkt->entries[count].flags = LE16(0x0004);
+    ascii_to_utf16("DATABASE/US", pkt->entries[count].name, 0x11);
+    pkt->entries[count].name[0x11] = 0x08;
+    ++count;
+    len += 0x2C;
 
     /* Add our entries... */
-    pkt->entries[1].menu_id = LE32(MENU_ID_GM);
-    pkt->entries[1].item_id = LE32(ITEM_ID_GM_REFRESH_Q);
-    pkt->entries[1].flags = LE16(0x0004);
-    memcpy(pkt->entries[1].name, "R\0e\0f\0r\0e\0s\0h\0 \0Q\0u\0e\0s\0t\0s\0",
-           28);
+    pkt->entries[count].menu_id = LE32(MENU_ID_GM);
+    pkt->entries[count].item_id = LE32(ITEM_ID_GM_REFRESH_Q);
+    pkt->entries[count].flags = LE16(0x0004);
+    ascii_to_utf16("Refresh Quests", pkt->entries[count].name, 0x11);
+    ++count;
+    len += 0x2C;
 
-    pkt->entries[2].menu_id = LE32(MENU_ID_GM);
-    pkt->entries[2].item_id = LE32(0xFFFFFFFF);
-    pkt->entries[2].flags = LE16(0x0F04);
-    memcpy(pkt->entries[2].name, "M\0a\0i\0n\0 \0M\0e\0n\0u\0", 18);
+    if(IS_GLOBAL_ROOT(c)) {
+        pkt->entries[count].menu_id = LE32(MENU_ID_GM);
+        pkt->entries[count].item_id = LE32(ITEM_ID_GM_RESTART);
+        pkt->entries[count].flags = LE16(0x0004);
+        ascii_to_utf16("Restart", pkt->entries[count].name, 0x11);
+        ++count;
+        len += 0x2C;
+        
+        pkt->entries[count].menu_id = LE32(MENU_ID_GM);
+        pkt->entries[count].item_id = LE32(ITEM_ID_GM_SHUTDOWN);
+        pkt->entries[count].flags = LE16(0x0004);
+        ascii_to_utf16("Shutdown", pkt->entries[count].name, 0x11);
+        ++count;
+        len += 0x2C;
+    }
+
+    pkt->entries[count].menu_id = LE32(MENU_ID_GM);
+    pkt->entries[count].item_id = LE32(0xFFFFFFFF);
+    pkt->entries[count].flags = LE16(0x0F04);
+    ascii_to_utf16("Main Menu", pkt->entries[count].name, 0x11);
+    ++count;
+    len += 0x2C;
 
     /* Fill in some basic stuff */
     pkt->hdr.pkt_type = BLOCK_LIST_TYPE;
-    pkt->hdr.flags = count;
+    pkt->hdr.flags = (uint8_t)(count  - 1);
     pkt->hdr.pkt_len = LE16(len);
 
     /* Send the packet away */
@@ -2180,7 +2228,7 @@ static int send_gm_menu_pc(login_client_t *c) {
 
 int send_gm_menu(login_client_t *c) {
     /* Make sure the user is actually a GM... */
-    if(!c->is_gm) {
+    if(!IS_GLOBAL_GM(c)) {
         return -1;
     }
 

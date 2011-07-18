@@ -41,6 +41,8 @@
 #define ITEM_ID_INIT_GM         0x00000003
 
 #define ITEM_ID_GM_REFRESH_Q    0x00000000
+#define ITEM_ID_GM_RESTART      0x00000001
+#define ITEM_ID_GM_SHUTDOWN     0x00000002
 
 /* This must be placed into the copyright field in the BB welcome packet. */
 const static char login_bb_welcome_copyright[] =

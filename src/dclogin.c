@@ -38,6 +38,7 @@ mini18n_t langs[CLIENT_LANG_COUNT];
 extern sylverant_dbconn_t conn;
 extern sylverant_quest_list_t qlist[CLIENT_TYPE_COUNT][CLIENT_LANG_COUNT];
 extern sylverant_limits_t *limits;
+extern int shutting_down;
 
 void print_packet(unsigned char *pkt, int len) {
     unsigned char *pos = pkt, *row = pkt;
@@ -826,13 +827,40 @@ static int handle_ship_select(login_client_t *c, dc_select_pkt *pkt) {
         /* GM Operations */
         case MENU_ID_GM:
             /* Make sure the user is a GM, and not just messing with packets. */
-            if(!c->is_gm) {
+            if(!IS_GLOBAL_GM(c)) {
                 return -1;
             }
 
             switch(item_id) {
                 case ITEM_ID_GM_REFRESH_Q:
                     read_quests();
+
+                    send_info_reply(c, "Quests refreshed.");
+                    return send_gm_menu(c);
+
+                case ITEM_ID_GM_RESTART:
+                    if(!IS_GLOBAL_ROOT(c)) {
+                        return -1;
+                    }
+
+                    shutting_down = 2;
+                    send_info_reply(c, "Restart scheduled.\nWill restart when\n"
+                                    "the server is empty.");
+                    debug(DBG_LOG, "Restart scheduled by %" PRIu32 "\n",
+                          c->guildcard);
+                    return send_gm_menu(c);
+
+                case ITEM_ID_GM_SHUTDOWN:
+                    if(!IS_GLOBAL_ROOT(c)) {
+                        return -1;
+                    }
+
+                    shutting_down = 1;
+                    send_info_reply(c, "Shutdown scheduled.\n"
+                                    "Will shut down when\n"
+                                    "the server is empty.");
+                    debug(DBG_LOG, "Shutdown scheduled by %" PRIu32 "\n",
+                          c->guildcard);
                     return send_gm_menu(c);
 
                 case 0xFFFFFFFF:
