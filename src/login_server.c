@@ -420,8 +420,8 @@ static void run_server(int dcsocks[NUM_DCSOCKS], int pcsocks[NUM_PCSOCKS],
                     }
 
                     my_ntop(&addr, ipstr);
-                    debug(DBG_LOG, "Accepted Dreamcast connection from %s\n",
-                          ipstr);
+                    debug(DBG_LOG, "Accepted Dreamcast connection from %s "
+                          "on port %d\n", ipstr, dcports[j][1]);
 
                     if(!create_connection(asock, CLIENT_TYPE_DC,addr_p, len)) {
                         close(asock);
@@ -441,8 +441,8 @@ static void run_server(int dcsocks[NUM_DCSOCKS], int pcsocks[NUM_PCSOCKS],
                     }
 
                     my_ntop(&addr, ipstr);
-                    debug(DBG_LOG, "Accepted PC connection from %s\n",
-                          ipstr);
+                    debug(DBG_LOG, "Accepted PC connection from %s "
+                          "on port %d\n", ipstr, pcports[j][1]);
 
                     if(!create_connection(asock, CLIENT_TYPE_PC, addr_p, len)) {
                         close(asock);
@@ -462,8 +462,8 @@ static void run_server(int dcsocks[NUM_DCSOCKS], int pcsocks[NUM_PCSOCKS],
                     }
 
                     my_ntop(&addr, ipstr);
-                    debug(DBG_LOG, "Accepted Gamecube connection from %s\n",
-                          ipstr);
+                    debug(DBG_LOG, "Accepted Gamecube connection from %s "
+                          "on port %d\n", ipstr, gcports[j][1]);
 
                     if(!create_connection(asock, CLIENT_TYPE_GC, addr_p, len)) {
                         close(asock);
@@ -483,8 +483,8 @@ static void run_server(int dcsocks[NUM_DCSOCKS], int pcsocks[NUM_PCSOCKS],
                     }
 
                     my_ntop(&addr, ipstr);
-                    debug(DBG_LOG, "Accepted Episode 3 connection from %s\n",
-                          ipstr);
+                    debug(DBG_LOG, "Accepted Episode 3 connection from %s "
+                          "on port %d\n", ipstr, ep3ports[j][1]);
 
                     if(!create_connection(asock, CLIENT_TYPE_EP3, addr_p,
                                           len)) {
@@ -505,8 +505,8 @@ static void run_server(int dcsocks[NUM_DCSOCKS], int pcsocks[NUM_PCSOCKS],
                     }
 
                     my_ntop(&addr, ipstr);
-                    debug(DBG_LOG, "Accepted Blue Burst connection from %s\n",
-                          ipstr);
+                    debug(DBG_LOG, "Accepted Blue Burst connection from %s "
+                          "on port %d\n", ipstr, bbports[j][1]);
 
                     if(j & 1) {
                         type = CLIENT_TYPE_BB_CHARACTER;

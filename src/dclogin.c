@@ -516,6 +516,31 @@ static int handle_gchlcheck(login_client_t *c, gc_hlcheck_pkt *pkt) {
     time_t banlen;
     int banned = is_ip_banned(c, &banlen, query);
 
+    /* Check the version code of the connecting client since some clients seem
+       to want to connect on wonky ports... */
+    switch(pkt->version) {
+        case 0x30: /* PSO Episode 1 & 2 (non plus...) */
+        case 0x31:
+        case 0x33:
+        case 0x34:
+        case 0x32: /* PSO Episode 1 & 2 Plus */
+        case 0x35:
+        case 0x36:
+        case 0x39:
+            c->type = CLIENT_TYPE_GC;
+            break;
+
+        case 0x40: /* Episode 3 (trial?) */
+        case 0x41: /* Episode 3 (US) */
+        case 0x42: /* Episode 3 (Japanese) */
+        case 0x43: /* Episode 3 (Europe) */
+            c->type = CLIENT_TYPE_EP3;
+            break;
+
+        default:
+            debug(DBG_LOG, "Unknown version code: %02x\n", pkt->version);
+    }
+
     /* Make sure the user isn't IP banned. */
     if(banned == -1) {
         return send_simple(c, LOGIN_9A_TYPE, LOGIN_DB_CONN_ERROR);
