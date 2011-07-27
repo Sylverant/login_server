@@ -179,8 +179,9 @@ static int send_ban_msg(login_client_t *c, time_t until, const char *reason) {
     struct tm cooked;
 
     /* Create the ban string. */
-    sprintf(string, __(c, "\tEYou have been banned from this server.\n"
-            "Reason:\n%s\n\nYour ban expires:\n"), reason);
+    sprintf(string, "%s\n%s:\n%s\n\n%s:\n",
+            __(c, "\tEYou have been banned from this server."), __(c, "Reason"),
+            reason, __(c, "Your ban expires"));
 
     if((uint32_t)until == 0xFFFFFFFF) {
         strcat(string, __(c, "Never"));
@@ -353,7 +354,7 @@ static int handle_login3(login_client_t *c, dc_login_93_pkt *pkt) {
         return -1;
     }
     else if(banned) {
-        send_large_msg(c, __(c, "\tEYour guildcard is already online.\n"));
+        send_large_msg(c, __(c, "\tEYour guildcard is already online."));
         return -1;
     }
 
@@ -478,7 +479,7 @@ static int handle_logina(login_client_t *c, dcv2_login_9a_pkt *pkt) {
         return send_simple(c, LOGIN_9A_TYPE, LOGIN_9A_ERROR);
     }
     else if(banned) {
-        send_large_msg(c, __(c, "\tEYour guildcard is already online.\n"));
+        send_large_msg(c, __(c, "\tEYour guildcard is already online."));
         return -1;
     }
 
@@ -587,7 +588,7 @@ static int handle_gchlcheck(login_client_t *c, gc_hlcheck_pkt *pkt) {
             return send_simple(c, LOGIN_9A_TYPE, LOGIN_DB_CONN_ERROR);
         }
         else if(banned) {
-            send_large_msg(c, __(c, "\tEYour guildcard is already online.\n"));
+            send_large_msg(c, __(c, "\tEYour guildcard is already online."));
             return -1;
         }
 
@@ -835,7 +836,7 @@ static int handle_ship_select(login_client_t *c, dc_select_pkt *pkt) {
                 case ITEM_ID_GM_REFRESH_Q:
                     read_quests();
 
-                    send_info_reply(c, "Quests refreshed.");
+                    send_info_reply(c, __(c, "\tEQuests refreshed."));
                     return send_gm_menu(c);
 
                 case ITEM_ID_GM_RESTART:
@@ -844,8 +845,9 @@ static int handle_ship_select(login_client_t *c, dc_select_pkt *pkt) {
                     }
 
                     shutting_down = 2;
-                    send_info_reply(c, "Restart scheduled.\nWill restart when\n"
-                                    "the server is empty.");
+                    send_info_reply(c, __(c, "\tERestart scheduled.\n"
+                                          "Will restart when\n"
+                                          "the server is empty."));
                     debug(DBG_LOG, "Restart scheduled by %" PRIu32 "\n",
                           c->guildcard);
                     return send_gm_menu(c);
@@ -856,9 +858,9 @@ static int handle_ship_select(login_client_t *c, dc_select_pkt *pkt) {
                     }
 
                     shutting_down = 1;
-                    send_info_reply(c, "Shutdown scheduled.\n"
-                                    "Will shut down when\n"
-                                    "the server is empty.");
+                    send_info_reply(c, __(c, "\tEShutdown scheduled.\n"
+                                          "Will shut down when\n"
+                                          "the server is empty."));
                     debug(DBG_LOG, "Shutdown scheduled by %" PRIu32 "\n",
                           c->guildcard);
                     return send_gm_menu(c);

@@ -1,4 +1,6 @@
-\tEYou have been banned from this server.\nReason:\n%s\n\nYour ban expires:\n|\tEHas sido baneado de este servidor.\nMotivo:\n%s\n\nTu ban finaliza:\n
+\tEYou have been banned from this server.|\tEHas sido baneado de este servidor.
+Reason|Motivo
+Your ban expires|Tu ban finaliza
 Never|Jamás
 \tEInternal Server Error.\nPlease try again later.|\tEError interno del servidor.\nPor favor, inténtalo más tarde.
 \tENothing here.|\tENada aquí.

@@ -1,0 +1,59 @@
+# Sylverant login server translation file -- Master strings list.
+# Each line starts with a string in English from the source code. This should be
+# followed by a pipe character (|) then the string in the destination language of
+# the translation.
+#
+# Some notes about the translation file format:
+#
+# All files should be UTF-8. Note that this will be changed to the appropriate
+# encoding internally by the server. For PSOPC and PSOBB clients, that would be
+# UTF-16 Little Endian, and for PSODC and PSOGC it will either be Shift-JIS
+# (for Japanese) or ISO-8859-1 (all other languages). Please make sure that all
+# characters you use can be represented in the appropriate encoding.
+#
+# If a pipe character is needed in the string, escape it with a slash
+# (so like this: \|). There are additionally other characters that are able
+# to be done with escapes, such as horizontal tab (\t) and newline (\n).
+#
+# Throughout the strings, you'll see sequences like \tE and \tC4. These are
+# flags to PSO. \tE sets the encoding for non-Japanese. \tC4 sets the color to
+# (in the case of the 4) red. Please keep the colors as-is for consistency
+# across translations. However, for Japanese strings, you will need to replace
+# \tE with \tJ in your translated versions. For the other versions, just copy
+# these flags over untouched if you see them.
+#
+# Comments begin with a # character and span the rest of the line.
+#
+# Blank lines are ignored.
+#
+# Strings are only listed in the first file they appear in (at the time of the
+# creation of the list).
+
+####################################################################
+# File: bbcharacter.c                                              #
+####################################################################
+\tEDatabase error.\n\nPlease contact the server administrator.
+\tENothing here.
+\tE\tC4That ship is now\noffline.
+Users
+Teams
+
+####################################################################
+# File: dclogin.c                                                  #
+####################################################################
+\tEYou have been banned from this server.
+Reason
+Your ban expires
+Never
+\tEInternal Server Error.\nPlease try again later.
+\tEYour guild card is already online.
+\tEQuests refreshed.
+\tERestart scheduled.\nWill restart when\nthe server is empty.
+\tEShutdown scheduled.\nWill shut down when\nthe server is empty.
+\tEYou have one or more banned items in\nyour inventory. Please remove them and\ntry again later.
+
+####################################################################
+# File: login_packets.c                                            #
+####################################################################
+\tE\tC4Something went wrong!
+\tC7The information requested is missing.

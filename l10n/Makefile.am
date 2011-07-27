@@ -1,4 +1,5 @@
-LANGS=fr sp de
+EXTRA_DIST = login-strings.txt
+LANGS = fr sp de
 
 dist-hook:
 	@for l in $(LANGS) ; do \

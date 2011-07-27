@@ -367,8 +367,8 @@ static int handle_option_request(login_client_t *c) {
         sylverant_db_result_free(result);
     }
     else {
-        send_large_msg(c, "Database error.\n\n"
-                       "Please contact the server administrator.");
+        send_large_msg(c, __(c, "\tEDatabase error.\n\n"
+                       "Please contact the server administrator."));
         return -1;
     }
 
