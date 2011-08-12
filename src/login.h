@@ -83,6 +83,7 @@ typedef struct login_client {
     int disconnected;
     int hdr_size;
     int is_ipv6;
+    int motd_wait;
 
     struct sockaddr_storage ip_addr;
 

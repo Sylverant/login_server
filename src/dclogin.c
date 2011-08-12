@@ -989,6 +989,7 @@ int process_dclogin_packet(login_client_t *c, void *pkt) {
     pc_pkt_hdr_t *pc = (pc_pkt_hdr_t *)pkt;
     uint8_t type;
     uint16_t len;
+    int tmp;
 
     if(c->type == CLIENT_TYPE_DC || c->type == CLIENT_TYPE_GC ||
        c->type == CLIENT_TYPE_EP3) {
@@ -1044,6 +1045,16 @@ int process_dclogin_packet(login_client_t *c, void *pkt) {
         case SHIP_LIST_TYPE:
             /* XXXX: I don't have anything here either, but thought I'd be
                funny anyway. */
+            tmp = send_motd(c);
+
+            if(!tmp) {
+                c->motd_wait = 1;
+                return 0;
+            }
+            else if(tmp < 0) {
+                return tmp;
+            }
+
             return send_initial_menu(c);
 
         case INFO_REQUEST_TYPE:
@@ -1089,8 +1100,14 @@ int process_dclogin_packet(login_client_t *c, void *pkt) {
             return 0;
 
         case GC_MSG_BOX_CLOSED_TYPE:
-            /* XXXX: This will need work if I ever have an initial MOTD or
-               something like that. */
+            /* XXXX: Fixed for having an initial MOTD. I wonder if Blue Burst
+               has this packet type too. If so, then starting it with GC doesn't
+               necessarily make sense. */
+            if(c->motd_wait) {
+                c->motd_wait = 0;
+                return send_initial_menu(c);
+            }
+
             return send_info_list(c);
 
         default:

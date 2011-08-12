@@ -149,4 +149,7 @@ int send_info_file(login_client_t *c, uint32_t entry);
 /* Send the GM operations menu to the user. */
 int send_gm_menu(login_client_t *c);
 
+/* Send the message of the day to the given client. */
+int send_motd(login_client_t *c);
+
 #endif /* !LOGIN_PACKETS_H */
