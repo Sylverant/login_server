@@ -696,10 +696,10 @@ static int send_initial_menu_gc(login_client_t *c) {
 
     /* If the user is a GM, give them a bit more... */
     if(IS_GLOBAL_GM(c)) {
-        pkt->entries[3].menu_id = LE32(MENU_ID_INITIAL);
-        pkt->entries[3].item_id = LE32(ITEM_ID_INIT_GM);
-        pkt->entries[3].flags = LE16(0x0004);
-        strcpy(pkt->entries[3].name, "GM Operations");
+        pkt->entries[4].menu_id = LE32(MENU_ID_INITIAL);
+        pkt->entries[4].item_id = LE32(ITEM_ID_INIT_GM);
+        pkt->entries[4].flags = LE16(0x0004);
+        strcpy(pkt->entries[4].name, "GM Operations");
         ++count;
         len += 0x1C;
     }

@@ -210,7 +210,8 @@ int read_from_client(login_client_t *c) {
            0x9A for v2). Hopefully there's no way to get these particular
            combinations with the GC encryption... */
         if(c->pkt.dc.pkt_type == 0x90 && c->pkt.dc.flags == 0 &&
-           LE16(c->pkt.dc.pkt_len) == 0x0028) {
+           (LE16(c->pkt.dc.pkt_len) == 0x0028 ||
+            LE16(c->pkt.dc.pkt_len) == 0x0026)) {
             c->got_first = 1;
             c->hdr_read = 1;
         }
@@ -257,14 +258,14 @@ int read_from_client(login_client_t *c) {
                     break;
             }
 
-            /* We'll always need a multiple of 8 or 4 (depending on the type of
-               the client) bytes. */
-            if(pkt_sz & (c->hdr_size - 1)) {
-                pkt_sz = (pkt_sz & (0x10000 - c->hdr_size)) + c->hdr_size;
-            }
-
             /* Do we have the whole packet? */
             if(sz >= (ssize_t)pkt_sz) {
+                /* We'll always need a multiple of 8 or 4 (depending on the type
+                   of the client) bytes. */
+                if(pkt_sz & (c->hdr_size - 1)) {
+                    pkt_sz = (pkt_sz & (0x10000 - c->hdr_size)) + c->hdr_size;
+                }
+
                 /* Yes, we do, decrypt it. */
                 CRYPT_CryptData(&c->client_cipher, rbp + c->hdr_size,
                                 pkt_sz - c->hdr_size, 0);
@@ -290,6 +291,11 @@ int read_from_client(login_client_t *c) {
 
                 rbp += pkt_sz;
                 sz -= pkt_sz;
+
+                /* Silly buggy versions of PSO... */
+                if(sz < 0) {
+                    sz = 0;
+                }
                 
                 c->hdr_read = 0;
             }
