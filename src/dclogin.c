@@ -1110,6 +1110,11 @@ int process_dclogin_packet(login_client_t *c, void *pkt) {
 
             return send_info_list(c);
 
+        case DL_QUEST_FILE_TYPE:
+        case DL_QUEST_CHUNK_TYPE:
+            /* XXXX: Nothing useful to do with these by the time we get them. */
+            return 0;
+
         default:
             print_packet((unsigned char *)pkt, len);
             return -3;
