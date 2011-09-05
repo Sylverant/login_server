@@ -121,6 +121,8 @@ sylverant_limits_t *limits = NULL;
 sylverant_quest_list_t qlist[CLIENT_TYPE_COUNT][CLIENT_LANG_COUNT];
 int shutting_down = 0;
 
+static const char *config_file = NULL;
+static const char *custom_dir = NULL;
 static int dont_daemonize = 0;
 
 /* Print information about this program to stdout. */
@@ -147,6 +149,9 @@ static void print_help(const char *bin) {
            "--verbose       Log many messages that might help debug a problem\n"
            "--quiet         Only log warning and error messages\n"
            "--reallyquiet   Only log error messages\n"
+           "-C configfile   Use the specified configuration instead of the\n"
+           "                default one.\n"
+           "-D directory    Use the specified directory as the root\n"
            "--nodaemon      Don't daemonize\n"
            "--help          Print this help and exit\n\n"
            "Note that if more than one verbosity level is specified, the last\n"
@@ -170,6 +175,14 @@ static void parse_command_line(int argc, char *argv[]) {
         }
         else if(!strcmp(argv[i], "--reallyquiet")) {
             debug_set_threshold(DBG_ERROR);
+        }
+        else if(!strcmp(argv[i], "-C")) {
+            /* Save the config file's name. */
+            config_file = argv[++i];
+        }
+        else if(!strcmp(argv[i], "-D")) {
+            /* Save the custom dir */
+            custom_dir = argv[++i];
         }
         else if(!strcmp(argv[i], "--nodaemon")) {
             dont_daemonize = 1;
@@ -219,11 +232,13 @@ void read_quests() {
 
 /* Load the configuration file. */
 static void load_config() {
-    if(sylverant_read_config(&cfg)) {
+    if(sylverant_read_config(config_file, &cfg)) {
         debug(DBG_ERROR, "Cannot load configuration!\n");
         exit(EXIT_FAILURE);
     }
+}
 
+static void load_config2() {
     /* Attempt to read each quests file... */
     read_quests();
 
@@ -705,6 +720,8 @@ int main(int argc, char *argv[]) {
     char *initial_path;
     long size;
 
+    parse_command_line(argc, argv);
+
     /* Save the initial path, so that if /restart is used we'll be starting from
        the same directory. */
     size = pathconf(".", _PC_PATH_MAX);
@@ -715,9 +732,14 @@ int main(int argc, char *argv[]) {
         debug(DBG_WARN, "Cannot save initial path, Restart may not work!\n");
     }
 
-    chdir(sylverant_directory);
+    load_config();
 
-    parse_command_line(argc, argv);
+    if(!custom_dir) {
+        chdir(sylverant_directory);
+    }
+    else {
+        chdir(custom_dir);
+    }
 
     /* If we're supposed to daemonize, do it now. */
     if(!dont_daemonize) {
@@ -730,7 +752,7 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    load_config();
+    load_config2();
 
     /* Init mini18n if we have it. */
     init_i18n();
