@@ -23,6 +23,8 @@
 #include <inttypes.h>
 #include <unistd.h>
 
+#include <zlib.h>
+
 #include <openssl/sha.h>
 
 #include <sylverant/checksum.h>
@@ -379,9 +381,11 @@ static int handle_char_select(login_client_t *c, bb_char_select_pkt *pkt) {
     char query[256];
     void *result;
     char **row;
+    unsigned long *len, sz;
     int rv = 0;
     sylverant_bb_db_char_t *char_data;
     sylverant_bb_mini_char_t mc;
+    uLong sz2;
 
     /* Make sure the slot is sane */
     if(pkt->slot > 3) {
@@ -389,7 +393,7 @@ static int handle_char_select(login_client_t *c, bb_char_select_pkt *pkt) {
     }
 
     /* Query the database for the data */
-    sprintf(query, "SELECT data FROM character_data WHERE guildcard='%"
+    sprintf(query, "SELECT data, size FROM character_data WHERE guildcard='%"
             PRIu32 "' AND slot='%d'", c->guildcard, (int)pkt->slot);
 
     if(sylverant_db_query(&conn, query)) {
@@ -405,13 +409,62 @@ static int handle_char_select(login_client_t *c, bb_char_select_pkt *pkt) {
     if(pkt->reason == 0) {
         /* The client wants the preview data for character select... */
         if(row) {
+            /* Grab the length of the character data */
+            if(!(len = sylverant_db_result_lengths(result))) {
+                sylverant_db_result_free(result);
+                debug(DBG_WARN, "Couldn't get length of character data\n");
+                debug(DBG_WARN, "%s\n", sylverant_db_error(&conn));
+                return -1;
+            }
+
+            sz = len[0];
+            char_data =
+                (sylverant_bb_db_char_t*)malloc(sizeof(sylverant_bb_db_char_t));
+
+            if(!char_data) {
+                debug(DBG_WARN, "Couldn't allocate space for char data\n");
+                debug(DBG_WARN, "%s\n", strerror(errno));
+                sylverant_db_result_free(result);
+                return -2;
+            }
+
+            if(row[1]) {
+                if(atoi(row[1]) != sizeof(sylverant_bb_db_char_t)) {
+                    sylverant_db_result_free(result);
+                    free(char_data);
+                    debug(DBG_WARN, "Invalid character data length!\n");
+                    return -2;
+                }
+
+                sz2 = sizeof(sylverant_bb_db_char_t);
+
+                if(uncompress((Bytef *)char_data, &sz2, (Bytef *)row[0],
+                              (uLong)sz) != Z_OK) {
+                    sylverant_db_result_free(result);
+                    free(char_data);
+                    debug(DBG_WARN, "Can't uncompress character data\n");
+                    return -3;
+                }
+            }
+            else {
+                if(sz != sizeof(sylverant_bb_db_char_t)) {
+                    sylverant_db_result_free(result);
+                    free(char_data);
+                    debug(DBG_WARN, "Invalid (unc) character data length!\n");
+                    return -2;
+                }
+
+                memcpy(char_data, row[0], sizeof(sylverant_bb_db_char_t));
+            }
+
             /* We've got it... Copy it out of the row retrieved. */
-            char_data = (sylverant_bb_db_char_t *)row[0];
             memcpy(mc.guildcard_str, char_data->character.guildcard_str, 0x70);
             mc.level = char_data->character.level;
             mc.exp = char_data->character.exp;
             mc.play_time = char_data->character.play_time;
             mc.unused[11] = mc.unused[12] = mc.unused[13] = mc.unused[14] = 0;
+
+            free(char_data);
 
             rv = send_bb_char_preview(c, &mc, pkt->slot);
         }
@@ -548,7 +601,7 @@ static int handle_guild_request(login_client_t *c) {
     sylverant_db_result_free(result);
 
     /* Calculate the checksum, and send the header */
-    checksum = crc32((uint8_t *)c->gc_data, sizeof(bb_gc_data_t));
+    checksum = sylverant_crc32((uint8_t *)c->gc_data, sizeof(bb_gc_data_t));
 
     return send_bb_guild_header(c, checksum);
 }
@@ -962,7 +1015,7 @@ int load_param_data(void) {
         fclose(fp2);
 
         /* Fill in the stuff in the header first */
-        checksum = crc32(rawbuf + offset, filelen);
+        checksum = sylverant_crc32(rawbuf + offset, filelen);
 
         param_hdr->entries[i].size = LE32(((uint32_t)filelen));
         param_hdr->entries[i].checksum = LE32(checksum);
