@@ -1,6 +1,6 @@
 /*
     Sylverant Login Server
-    Copyright (C) 2009, 2010, 2011 Lawrence Sebald
+    Copyright (C) 2009, 2010, 2011, 2012 Lawrence Sebald
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License version 3
@@ -16,6 +16,7 @@
 */
 
 #include <stdio.h>
+#include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -67,7 +68,6 @@ login_client_t *create_connection(int sock, int type, struct sockaddr *ip,
 
             CRYPT_CreateKeys(&rv->server_cipher, &server_seed_dc, CRYPT_PC);
             CRYPT_CreateKeys(&rv->client_cipher, &client_seed_dc, CRYPT_PC);
-            rv->hdr_size = 4;
 
             /* Send the client the welcome packet, or die trying. */
             if(send_dc_welcome(rv, server_seed_dc, client_seed_dc)) {
@@ -100,7 +100,6 @@ login_client_t *create_connection(int sock, int type, struct sockaddr *ip,
                              CRYPT_GAMECUBE);
             CRYPT_CreateKeys(&rv->client_cipher, &client_seed_dc,
                              CRYPT_GAMECUBE);
-            rv->hdr_size = 4;
 
             /* Send the client the welcome packet, or die trying. */
             if(send_dc_welcome(rv, server_seed_dc, client_seed_dc)) {
@@ -132,7 +131,6 @@ login_client_t *create_connection(int sock, int type, struct sockaddr *ip,
                              CRYPT_BLUEBURST);
             CRYPT_CreateKeys(&rv->client_cipher, client_seed_bb,
                              CRYPT_BLUEBURST);
-            rv->hdr_size = 8;
 
             /* Send the client the welcome packet, or die trying. */
             if(send_bb_welcome(rv, server_seed_bb, client_seed_bb)) {
@@ -175,162 +173,178 @@ void destroy_connection(login_client_t *c) {
 /* Read data from a client that is connected to any port. */
 int read_from_client(login_client_t *c) {
     ssize_t sz;
-    uint16_t pkt_sz = 0;
-    int rv = 0;
-    unsigned char *rbp;
-    void *tmp;
+    int pkt_sz = c->pkt_sz, pkt_cur = c->pkt_cur, rv;
+    pkt_header_t tmp_hdr;
+    dc_pkt_hdr_t dc;
+    const int hs = hdr_sizes[c->type], hsm = 0x10000 - hs;
 
-    /* If we've got anything buffered, copy it out to the main buffer to make
-       the rest of this a bit easier. */
-    if(c->recvbuf_cur) {
-        memcpy(recvbuf, c->recvbuf, c->recvbuf_cur);
-    }
-
-    /* Attempt to read, and if we don't get anything, punt. */
-    if((sz = recv(c->sock, recvbuf + c->recvbuf_cur, 65536 - c->recvbuf_cur,
-                  0)) <= 0) {
-        if(sz == -1) {
-            perror("recv");
-        }
-
-        return -1;
-    }
-
-    sz += c->recvbuf_cur;
-    c->recvbuf_cur = 0;
-    rbp = recvbuf;
-
-    /* Make sure the client is actually a DC client, since it could be a PSOGC
-       client using the EU version. */
-    if(c->type == CLIENT_TYPE_DC && !c->got_first && sz >= 4) {
-        memcpy(&c->pkt, rbp, 4);
-        CRYPT_CryptData(&c->client_cipher, &c->pkt, 4, 0);
-
-        /* Check if its one of the two packets we're expecting (0x90 for v1,
-           0x9A for v2). Hopefully there's no way to get these particular
-           combinations with the GC encryption... */
-        if(c->pkt.dc.pkt_type == 0x90 && c->pkt.dc.flags == 0 &&
-           (LE16(c->pkt.dc.pkt_len) == 0x0028 ||
-            LE16(c->pkt.dc.pkt_len) == 0x0026)) {
-            c->got_first = 1;
-            c->hdr_read = 1;
-        }
-        else if(c->pkt.dc.pkt_type == 0x9A && c->pkt.dc.flags == 0 &&
-                LE16(c->pkt.dc.pkt_len) == 0x00E0) {
-            c->got_first = 1;
-            c->hdr_read = 1;
-        }
-        /* If we end up in here, its pretty much gotta be a Gamecube client, or
-           someone messing with us. */
-        else {
-            c->type = CLIENT_TYPE_GC;
-            CRYPT_CreateKeys(&c->client_cipher, &c->client_key, CRYPT_GAMECUBE);
-            CRYPT_CreateKeys(&c->server_cipher, &c->server_key, CRYPT_GAMECUBE);
-            memset(&c->pkt, 0, 4);
-        }
-    }
-
-    /* As long as what we have is long enough, decrypt it. */
-    if(sz >= c->hdr_size) {
-        while(sz >= c->hdr_size && rv == 0) {
-            /* Decrypt the packet header so we know what exactly we're looking
-               for, in terms of packet length. */
-            if(!c->hdr_read) {
-                memcpy(&c->pkt, rbp, c->hdr_size);
-                CRYPT_CryptData(&c->client_cipher, &c->pkt, c->hdr_size, 0);
-                c->hdr_read = 1;
-            }
-
-            switch(c->type) {
-                case CLIENT_TYPE_DC:
-                case CLIENT_TYPE_GC:
-                case CLIENT_TYPE_EP3:
-                    pkt_sz = LE16(c->pkt.dc.pkt_len);
-                    break;
-
-                case CLIENT_TYPE_PC:
-                    pkt_sz = LE16(c->pkt.pc.pkt_len);
-                    break;
-
-                case CLIENT_TYPE_BB_LOGIN:
-                case CLIENT_TYPE_BB_CHARACTER:
-                    pkt_sz = LE16(c->pkt.bb.pkt_len);
-                    break;
-            }
-
-            /* Do we have the whole packet? */
-            if(sz >= (ssize_t)pkt_sz) {
-                /* We'll always need a multiple of 8 or 4 (depending on the type
-                   of the client) bytes. */
-                if(pkt_sz & (c->hdr_size - 1)) {
-                    pkt_sz = (pkt_sz & (0x10000 - c->hdr_size)) + c->hdr_size;
-                }
-
-                /* Yes, we do, decrypt it. */
-                CRYPT_CryptData(&c->client_cipher, rbp + c->hdr_size,
-                                pkt_sz - c->hdr_size, 0);
-                memcpy(rbp, &c->pkt, c->hdr_size);
-
-                /* Pass it onto the correct handler. */
-                switch(c->type) {
-                    case CLIENT_TYPE_DC:
-                    case CLIENT_TYPE_PC:
-                    case CLIENT_TYPE_GC:
-                    case CLIENT_TYPE_EP3:
-                        rv = process_dclogin_packet(c, rbp);
-                        break;
-
-                    case CLIENT_TYPE_BB_LOGIN:
-                        rv = process_bblogin_packet(c, rbp);
-                        break;
-
-                    case CLIENT_TYPE_BB_CHARACTER:
-                        rv = process_bbcharacter_packet(c, rbp);
-                        break;
-                }
-
-                rbp += pkt_sz;
-                sz -= pkt_sz;
-
-                /* Silly buggy versions of PSO... */
-                if(sz < 0) {
-                    sz = 0;
-                }
-                
-                c->hdr_read = 0;
-            }
-            else {
-                /* Nope, we're missing part, break out of the loop, and buffer
-                   the remaining data. */
-                break;
-            }
-        }
-    }
-
-    /* If we've still got something left here, buffer it for the next pass. */
-    if(sz) {
-        /* Reallocate the recvbuf for the client if its too small. */
-        if(c->recvbuf_size < sz) {
-            tmp = realloc(c->recvbuf, sz);
-
-            if(!tmp) {
-                perror("realloc");
+    if(!c->recvbuf) {
+        /* Read in a new header... */
+        if((sz = recv(c->sock, &tmp_hdr, hs, 0)) < hs) {
+            /* If we have an error, disconnect the client */
+            if(sz <= 0) {
+                if(sz == -1)
+                    debug(DBG_WARN, "recv: %s\n", strerror(errno));
                 return -1;
             }
 
-            c->recvbuf = (unsigned char *)tmp;
-            c->recvbuf_size = sz;
+            /* Otherwise, its just not all there yet, so punt for now... */
+            if(!(c->recvbuf = (unsigned char *)malloc(hs))) {
+                debug(DBG_WARN, "malloc: %s\n", strerror(errno));
+                return -1;
+            }
+
+            /* Copy over what we did get */
+            memcpy(c->recvbuf, &tmp_hdr, sz);
+            c->pkt_cur = sz;
+            return 0;
+        }
+    }
+    /* This case should be exceedingly rare... */
+    else if(!pkt_sz) {
+        /* Try to finish reading the header */
+        if((sz = recv(c->sock, c->recvbuf + pkt_cur, hs - pkt_cur,
+                      0)) < hs - pkt_cur) {
+            /* If we have an error, disconnect the client */
+            if(sz <= 0) {
+                if(sz == -1)
+                    debug(DBG_WARN, "recv: %s\n", strerror(errno));
+                return -1;
+            }
+
+            /* Update the pointer... */
+            c->pkt_cur += sz;
+            return 0;
         }
 
-        memcpy(c->recvbuf, rbp, sz);
-        c->recvbuf_cur = sz;
-    }
-    else {
-        /* Free the buffer, if we've got nothing in it. */
+        /* We now have the whole header, so ready things for that */
+        memcpy(&tmp_hdr, c->recvbuf, hs);
+        c->pkt_cur = 0;
         free(c->recvbuf);
-        c->recvbuf = NULL;
-        c->recvbuf_size = 0;
     }
 
+    /* If we haven't decrypted the packet header, do so now, since we definitely
+       have the whole thing at this point. */
+    if(!pkt_sz) {
+        /* If the client says its DC, make sure it actually is, since it could
+           be a PSOGC client using the EU version. */
+        if(c->type == CLIENT_TYPE_DC && !c->got_first) {
+            dc = tmp_hdr.dc;
+            CRYPT_CryptData(&c->client_cipher, &dc, 4, 0);
+
+            /* Check if its one of the two packets we're expecting (0x90 for v1,
+               0x9A for v2). Hopefully there's no way to get these particular
+               combinations with the GC encryption... */
+            if(dc.pkt_type == 0x90 && dc.flags == 0 &&
+               (LE16(dc.pkt_len) == 0x0028 || LE16(dc.pkt_len) == 0x0026)) {
+                c->got_first = 1;
+                tmp_hdr.dc = dc;
+            }
+            else if(dc.pkt_type == 0x9A && dc.flags == 0 &&
+                    LE16(dc.pkt_len) == 0x00E0) {
+                c->got_first = 1;
+                tmp_hdr.dc = dc;
+            }
+            /* If we end up in here, its pretty much gotta be a Gamecube client,
+               or someone messing with us. */
+            else {
+                c->type = CLIENT_TYPE_GC;
+                CRYPT_CreateKeys(&c->client_cipher, &c->client_key,
+                                 CRYPT_GAMECUBE);
+                CRYPT_CreateKeys(&c->server_cipher, &c->server_key,
+                                 CRYPT_GAMECUBE);
+                CRYPT_CryptData(&c->client_cipher, &tmp_hdr, hs, 0);
+            }
+        }
+        else {
+            CRYPT_CryptData(&c->client_cipher, &tmp_hdr, hs, 0);
+        }
+
+        switch(c->type) {
+            case CLIENT_TYPE_DC:
+            case CLIENT_TYPE_GC:
+            case CLIENT_TYPE_EP3:
+                pkt_sz = LE16(tmp_hdr.dc.pkt_len);
+                break;
+
+            case CLIENT_TYPE_PC:
+                pkt_sz = LE16(tmp_hdr.pc.pkt_len);
+                break;
+
+            case CLIENT_TYPE_BB_LOGIN:
+            case CLIENT_TYPE_BB_CHARACTER:
+                pkt_sz = LE16(tmp_hdr.bb.pkt_len);
+                break;
+        }
+
+        sz = (pkt_sz & (hs - 1)) ? (pkt_sz & hsm) + hs : pkt_sz;
+
+        /* Allocate space for the packet */
+        if(!(c->recvbuf = (unsigned char *)malloc(sz)))  {
+            debug(DBG_WARN, "malloc: %s\n", strerror(errno));
+            return -1;
+        }
+
+        /* Bah, stupid buggy versions of PSO handling this case in two very
+           different ways... When JPv1 sends a packet with a size not divisible
+           by the encryption word-size, it expects the server to pad the packet.
+           When Blue Burst does it, it sends padding itself. God only knows what
+           the other versions would do (but thankfully, they don't appear to do
+           any of that broken behavior, at least not that I've seen). */
+        if(c->type == CLIENT_TYPE_DC)
+            c->pkt_sz = pkt_sz;
+        else
+            c->pkt_sz = sz;
+
+        memcpy(c->recvbuf, &tmp_hdr, hs);
+        c->pkt_cur = hs;
+
+        /* If this packet is only a header, short-circuit and process it now. */
+        if(pkt_sz == hs)
+            goto process;
+
+        /* Return now, so we don't end up sleeping in the recv below. */
+        return 0;
+    }
+
+    /* See if the rest of the packet is here... */
+    if((sz = recv(c->sock, c->recvbuf + pkt_cur, pkt_sz - pkt_cur,
+                  0)) < pkt_sz - pkt_cur) {
+        if(sz <= 0) {
+            if(sz == -1)
+                debug(DBG_WARN, "recv: %s\n", strerror(errno));
+            return -1;
+        }
+
+        /* Didn't get it all, return for now... */
+        c->pkt_cur += sz;
+        return 0;
+    }
+
+    /* If we get this far, we've got the whole packet, so process it. */
+    CRYPT_CryptData(&c->client_cipher, c->recvbuf + hs, pkt_sz - hs, 0);
+
+process:
+    /* Pass it onto the correct handler. */
+    switch(c->type) {
+        case CLIENT_TYPE_DC:
+        case CLIENT_TYPE_PC:
+        case CLIENT_TYPE_GC:
+        case CLIENT_TYPE_EP3:
+            rv = process_dclogin_packet(c, c->recvbuf);
+            break;
+
+        case CLIENT_TYPE_BB_LOGIN:
+            rv = process_bblogin_packet(c, c->recvbuf);
+            break;
+
+        case CLIENT_TYPE_BB_CHARACTER:
+            rv = process_bbcharacter_packet(c, c->recvbuf);
+            break;
+    }
+
+    free(c->recvbuf);
+    c->recvbuf = NULL;
+    c->pkt_cur = c->pkt_sz = 0;
     return rv;
 }

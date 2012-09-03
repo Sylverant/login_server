@@ -1,6 +1,6 @@
 /*
     Sylverant Login Server
-    Copyright (C) 2009, 2010, 2011 Lawrence Sebald
+    Copyright (C) 2009, 2010, 2011, 2012 Lawrence Sebald
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License version 3
@@ -105,7 +105,7 @@ static int send_raw(login_client_t *c, int len) {
 /* Encrypt and send a packet away. */
 static int crypt_send(login_client_t *c, int len) {
     /* Expand it to be a multiple of 8/4 bytes long */
-    while(len & (c->hdr_size - 1)) {
+    while(len & (hdr_sizes[c->type] - 1)) {
         sendbuf[len++] = 0;
     }
 
@@ -1736,8 +1736,8 @@ int send_quest(login_client_t *c, sylverant_quest_t *q) {
         }
 
         /* Make sure we read up to a header-size boundary. */
-        if((read & (c->hdr_size - 1)) && !feof(fp)) {
-            long amt = (read & (c->hdr_size - 1));
+        if((read & (hdr_sizes[c->type] - 1)) && !feof(fp)) {
+            long amt = (read & (hdr_sizes[c->type] - 1));
 
             fseek(fp, -amt, SEEK_CUR);
             read -= amt;

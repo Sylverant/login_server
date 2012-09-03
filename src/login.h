@@ -1,6 +1,6 @@
 /*
     Sylverant Login Server
-    Copyright (C) 2009, 2010, 2011 Lawrence Sebald
+    Copyright (C) 2009, 2010, 2011, 2012 Lawrence Sebald
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License version 3
@@ -81,7 +81,6 @@ typedef struct login_client {
     int type;
     int sock;
     int disconnected;
-    int hdr_size;
     int is_ipv6;
     int motd_wait;
 
@@ -102,11 +101,10 @@ typedef struct login_client {
 
     CRYPT_SETUP client_cipher;
     CRYPT_SETUP server_cipher;
-    
+
     unsigned char *recvbuf;
-    int recvbuf_cur;
-    int recvbuf_size;
-    pkt_header_t pkt;
+    int pkt_cur;
+    int pkt_sz;
 
     unsigned char *sendbuf;
     int sendbuf_cur;
@@ -140,6 +138,10 @@ typedef struct login_client {
 /* The list of type codes for the quest directories. */
 static const char type_codes[][3] __attribute__((unused)) = {
     "dc", "pc", "gc", "e3"
+};
+
+static const int hdr_sizes[] __attribute__((unused)) = {
+    4, 4, 4, 4, 8, 8
 };
 
 /* Language codes. */

@@ -641,10 +641,10 @@ static int open_sock(int family, uint16_t port) {
     }
 
     if(family == PF_INET) {
+        memset(&addr, 0, sizeof(struct sockaddr_in));
         addr.sin_family = family;
         addr.sin_addr.s_addr = INADDR_ANY;
         addr.sin_port = htons(port);
-        memset(addr.sin_zero, 0, 8);
 
         if(bind(sock, (struct sockaddr *)&addr, sizeof(struct sockaddr_in))) {
             perror("bind");
@@ -669,7 +669,6 @@ static int open_sock(int family, uint16_t port) {
         }
 
         memset(&addr6, 0, sizeof(struct sockaddr_in6));
-
         addr6.sin6_family = family;
         addr6.sin6_addr = in6addr_any;
         addr6.sin6_port = htons(port);
