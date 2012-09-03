@@ -32,8 +32,6 @@
 /* Storage for our client list. */
 struct client_queue clients = TAILQ_HEAD_INITIALIZER(clients);
 
-uint8_t recvbuf[65536];
-
 /* Create a new connection, storing it in the list of clients. */
 login_client_t *create_connection(int sock, int type, struct sockaddr *ip,
                                   socklen_t size) {
