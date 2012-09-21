@@ -1,6 +1,6 @@
 /*
     Sylverant Login Server
-    Copyright (C) 2011 Lawrence Sebald
+    Copyright (C) 2011, 2012 Lawrence Sebald
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License version 3
@@ -36,6 +36,21 @@
 #include "player.h"
 #include "packets.h"
 #include "login_packets.h"
+
+#define NUM_PARAM_FILES 9
+
+/* The list of parameter files. These should be in blueburst/param */
+const static char *param_files[NUM_PARAM_FILES] = {
+    "ItemMagEdit.prs",
+    "ItemPMT.prs",
+    "BattleParamEntry.dat",
+    "BattleParamEntry_on.dat",
+    "BattleParamEntry_lab.dat",
+    "BattleParamEntry_lab_on.dat",
+    "BattleParamEntry_ep4.dat",
+    "BattleParamEntry_ep4_on.dat",
+    "PlyLevelTbl.prs"
+};
 
 /* Default key configuration for Blue Burst clients... */
 const static uint8_t default_keys[420] = {
@@ -925,11 +940,11 @@ int process_bbcharacter_packet(login_client_t *c, void *pkt) {
 }
 
 int load_param_data(void) {
-    FILE *fp, *fp2;
-    char fn[256];
+    FILE *fp2;
+    const char *fn;
     int i = 0, len;
     long filelen;
-    uint32_t checksum, offset = 0, num_files = 0;
+    uint32_t checksum, offset = 0;
     uint8_t *rawbuf;
 
     /* Allocate space for the buffer first */
@@ -940,48 +955,26 @@ int load_param_data(void) {
         return -1;
     }
 
-    fp = fopen("blueburst/param/param_files.txt", "r");
-    if(!fp) {
-        debug(DBG_ERROR, "Couldn't open param/param_files.txt\n");
-        free(rawbuf);
-        return -2;
-    }
-
-    /* Figure out how many entries we'll have */
-    while(fgets(fn, 256, fp)) {
-        ++num_files;
-    }
-
     /* Allocate space for the parameter header */
-    len = 0x08 + (num_files * 0x4C);
+    len = 0x08 + (NUM_PARAM_FILES * 0x4C);
     param_hdr = (bb_param_hdr_pkt *)malloc(len);
     if(!param_hdr) {
         debug(DBG_ERROR, "Couldn't allocate parameter header:\n%s\n",
               strerror(errno));
         free(rawbuf);
-        fclose(fp);
         return -3;
     }
-
-    /* Rewind the file... */
-    fseek(fp, 0, SEEK_SET);
 
     /* Go to the parameter file directory... */
     chdir("blueburst/param");
 
     param_hdr->hdr.pkt_type = LE16(BB_PARAM_HEADER_TYPE);
     param_hdr->hdr.pkt_len = LE16(len);
-    param_hdr->hdr.flags = LE32(num_files);
+    param_hdr->hdr.flags = LE32(NUM_PARAM_FILES);
 
-    /* Parse the param_files.txt for what we have. */
-    while(fgets(fn, 256, fp)) {
-        /* Chop off line endings... */
-        len = strlen(fn);
-
-        while(fn[len - 1] == '\n' || fn[len - 1] == '\r') {
-            fn[--len] = '\0';
-        }
-
+    /* Load each of the parameter files. */
+    for(i = 0; i < NUM_PARAM_FILES; ++i) {
+        fn = param_files[i];
         debug(DBG_LOG, "Loading param file: %s\n", fn);
 
         if(!(fp2 = fopen(fn, "rb"))) {
@@ -1005,7 +998,6 @@ int load_param_data(void) {
         if(filelen + offset > MAX_PARAMS_SIZE) {
             debug(DBG_WARN, "Params buffer would overflow reading %s\n", fn);
             fclose(fp2);
-            fclose(fp);
             free(rawbuf);
             return -3;
         }
@@ -1023,10 +1015,7 @@ int load_param_data(void) {
         strncpy(param_hdr->entries[i].filename, fn, 0x40);
 
         offset += filelen;
-        ++i;
     }
-
-    fclose(fp);
 
     /* Now that the header is built, time to make the chunks */
     num_param_chunks = offset / 0x6800;
@@ -1075,7 +1064,7 @@ int load_param_data(void) {
     /* Cleanup time */
     free(rawbuf);
     chdir("../..");
-    debug(DBG_LOG, "Read %" PRIu32 " files into %d chunks\n", num_files,
+    debug(DBG_LOG, "Read %" PRIu32 " files into %d chunks\n", NUM_PARAM_FILES,
           num_param_chunks);
 
     return 0;
