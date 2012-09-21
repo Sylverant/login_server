@@ -979,7 +979,9 @@ int load_param_data(void) {
 
         if(!(fp2 = fopen(fn, "rb"))) {
             debug(DBG_WARN, "Couldn't open param file: %s\n", fn);
-            continue;
+            fclose(fp2);
+            free(rawbuf);
+            return -3;
         }
 
         /* Figure out how long it is, and make sure its not going to overflow
@@ -991,7 +993,8 @@ int load_param_data(void) {
         if(filelen > 0x10000) {
             debug(DBG_WARN, "Param file %s too long (%l)\n", fn, filelen);
             fclose(fp2);
-            continue;
+            free(rawbuf);
+            return -3;
         }
 
         /* Make sure we aren't going over the max size... */
