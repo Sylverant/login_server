@@ -1,6 +1,6 @@
 /*
     Sylverant Login Server
-    Copyright (C) 2009, 2010, 2011 Lawrence Sebald
+    Copyright (C) 2009, 2010, 2011, 2013 Lawrence Sebald
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License version 3
@@ -225,6 +225,139 @@ static int is_gc_online(uint32_t gc) {
 }
 
 /* Handle a client's login request packet. */
+static int handle_ntelogin(login_client_t *c, dcnte_login_88_pkt *pkt) {
+    char query[256];
+    time_t banlen;
+    int banned = is_ip_banned(c, &banlen, query);
+
+    /* Make sure the user isn't IP banned. */
+    if(banned == -1) {
+        send_large_msg(c, __(c, "\tEInternal Server Error.\n"
+                             "Please try again later."));
+        return -1;
+    }
+    else if(banned) {
+        send_ban_msg(c, banlen, query);
+        return -1;
+    }
+
+    c->type = CLIENT_TYPE_DCNTE;
+    memcpy(c->serial, pkt->serial, 16);
+    memcpy(c->access_key, pkt->access_key, 16);
+
+    return send_simple(c, LOGIN_88_TYPE, 0);
+}
+
+static int handle_ntelogin8a(login_client_t *c, dcnte_login_8a_pkt *pkt) {
+    uint32_t gc;
+    char query[256], dc_id[32], serial[64], access[64];
+    void *result;
+    char **row;
+    int banned;
+    time_t banlen;
+
+    /* Escape all the important strings. */
+    sylverant_db_escape_str(&conn, dc_id, pkt->dc_id, 8);
+    sylverant_db_escape_str(&conn, serial, c->serial, 16);
+    sylverant_db_escape_str(&conn, access, c->access_key, 16);
+
+    sprintf(query, "SELECT guildcard FROM dreamcast_nte_clients WHERE "
+            "dc_id='%s' AND serial_number='%s' AND access_key='%s'", dc_id,
+            serial, access);
+
+    /* If we can't query the database, fail. */
+    if(sylverant_db_query(&conn, query)) {
+        send_large_msg(c, __(c, "\tEInternal Server Error.\n"
+                             "Please try again later."));
+        return -1;
+    }
+
+    result = sylverant_db_result_store(&conn);
+
+    if((row = sylverant_db_result_fetch(result))) {
+        /* We have seen this client before, save their guildcard for use. */
+        gc = (uint32_t)strtoul(row[0], NULL, 0);
+        sylverant_db_result_free(result);
+    }
+    else {
+        sylverant_db_result_free(result);
+
+        /* Assign a nice fresh new guildcard number to the client. */
+        sprintf(query, "INSERT INTO guildcards (account_id) VALUES (NULL)");
+
+        if(sylverant_db_query(&conn, query)) {
+            send_large_msg(c, __(c, "\tEInternal Server Error.\n"
+                                 "Please try again later."));
+            return -1;
+        }
+
+        /* Grab the new guildcard for the user. */
+        gc = (uint32_t)sylverant_db_insert_id(&conn);
+
+        /* Add the client into our database. */
+        sprintf(query, "INSERT INTO dreamcast_nte_clients (guildcard, "
+                "serial_number, access_key, dc_id) VALUES ('%u', '%s', '%s', "
+                "'%s')", gc, serial, access, dc_id);
+
+        if(sylverant_db_query(&conn, query)) {
+            send_large_msg(c, __(c, "\tEInternal Server Error.\n"
+                                 "Please try again later."));
+            return -1;
+        }
+    }
+
+    /* Make sure the guildcard isn't banned. */
+    banned = is_gc_banned(gc, &banlen, query);
+
+    if(banned == -1) {
+        send_large_msg(c, __(c, "\tEInternal Server Error.\n"
+                             "Please try again later."));
+        return -1;
+    }
+    else if(banned) {
+        send_ban_msg(c, banlen, query);
+        return -1;
+    }
+
+    /* Make sure the guildcard isn't online already. */
+    banned = is_gc_online(gc);
+
+    if(banned == -1) {
+        send_large_msg(c, __(c, "\tEInternal Server Error.\n"
+                             "Please try again later."));
+        return -1;
+    }
+    else if(banned) {
+        send_large_msg(c, __(c, "\tEYour guildcard is already online."));
+        return -1;
+    }
+
+    /* Check if the user is a GM or not. */
+    sprintf(query, "SELECT privlevel FROM account_data NATURAL JOIN guildcards "
+            "WHERE guildcard='%u'", gc);
+
+    if(sylverant_db_query(&conn, query)) {
+        send_large_msg(c, __(c, "\tEInternal Server Error.\n"
+                             "Please try again later."));
+        return -1;
+    }
+
+    result = sylverant_db_result_store(&conn);
+
+    if(result) {
+        if((row = sylverant_db_result_fetch(result))) {
+            c->is_gm = atoi(row[0]);
+        }
+
+        sylverant_db_result_free(result);
+    }
+
+    /* Not really sure this is what we should be doing here, but it seems to
+       work, so we'll roll with it for now. */
+    send_dc_security(c, gc, NULL, 0);
+    return send_ship_list(c, 0);
+}
+
 static int handle_login0(login_client_t *c, dc_login_90_pkt *pkt) {
     char query[256],  serial[32], access[32];
     void *result;
@@ -763,10 +896,14 @@ static int handle_logind(login_client_t *c, dcv2_login_9d_pkt *pkt) {
 
 /* Handle a client's ship select packet. */
 static int handle_ship_select(login_client_t *c, dc_select_pkt *pkt) {
-    sylverant_quest_list_t *l = &qlist[c->type][c->language_code];
+    sylverant_quest_list_t *l;
     uint32_t menu_id = LE32(pkt->menu_id);
     uint32_t item_id = LE32(pkt->item_id);
     int rv;
+
+    /* Don't go out of bounds... */
+    if(c->type < CLIENT_TYPE_DCNTE)
+         l = &qlist[c->type][c->language_code];
 
     switch(menu_id & 0x000000FF) {
         /* Initial menu */
@@ -992,7 +1129,7 @@ int process_dclogin_packet(login_client_t *c, void *pkt) {
     int tmp;
 
     if(c->type == CLIENT_TYPE_DC || c->type == CLIENT_TYPE_GC ||
-       c->type == CLIENT_TYPE_EP3) {
+       c->type == CLIENT_TYPE_EP3 || c->type == CLIENT_TYPE_DCNTE) {
         type = dc->pkt_type;
         len = LE16(dc->pkt_len);
     }
@@ -1002,6 +1139,14 @@ int process_dclogin_packet(login_client_t *c, void *pkt) {
     }
 
     switch(type) {
+        case LOGIN_88_TYPE:
+            /* XXXX: Oh look, we have a network trial edition up in here. */
+            return handle_ntelogin(c, (dcnte_login_88_pkt *)pkt);
+
+        case LOGIN_8A_TYPE:
+            /* XXXX: Uhm... Sega... WTF? */
+            return handle_ntelogin8a(c, (dcnte_login_8a_pkt *)pkt);
+
         case LOGIN_90_TYPE:
             /* XXXX: Hey! this does something now! */
             return handle_login0(c, (dc_login_90_pkt *)pkt);

@@ -1,6 +1,6 @@
 /*
     Sylverant Login Server
-    Copyright (C) 2009, 2010, 2011, 2012 Lawrence Sebald
+    Copyright (C) 2009, 2010, 2011, 2012, 2013 Lawrence Sebald
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License version 3
@@ -58,6 +58,7 @@ login_client_t *create_connection(int sock, int type, struct sockaddr *ip,
     }
 
     switch(type) {
+        case CLIENT_TYPE_DCNTE:
         case CLIENT_TYPE_DC:
         case CLIENT_TYPE_PC:
             /* Generate the encryption keys for the client and server. */
@@ -226,13 +227,14 @@ int read_from_client(login_client_t *c) {
     if(!pkt_sz) {
         /* If the client says its DC, make sure it actually is, since it could
            be a PSOGC client using the EU version. */
-        if(c->type == CLIENT_TYPE_DC && !c->got_first) {
+        if((c->type == CLIENT_TYPE_DC || c->type == CLIENT_TYPE_DCNTE) &&
+           !c->got_first) {
             dc = tmp_hdr.dc;
             CRYPT_CryptData(&c->client_cipher, &dc, 4, 0);
 
-            /* Check if its one of the two packets we're expecting (0x90 for v1,
-               0x9A for v2). Hopefully there's no way to get these particular
-               combinations with the GC encryption... */
+            /* Check if its one of the three packets we're expecting (0x90 for
+               v1, 0x9A for v2, or 0x88 for NTE). Hopefully there's no way to
+               get these particular combinations with the GC encryption... */
             if(dc.pkt_type == 0x90 && dc.flags == 0 &&
                (LE16(dc.pkt_len) == 0x0028 || LE16(dc.pkt_len) == 0x0026)) {
                 c->got_first = 1;
@@ -240,6 +242,11 @@ int read_from_client(login_client_t *c) {
             }
             else if(dc.pkt_type == 0x9A && dc.flags == 0 &&
                     LE16(dc.pkt_len) == 0x00E0) {
+                c->got_first = 1;
+                tmp_hdr.dc = dc;
+            }
+            else if(dc.pkt_type == 0x88 && dc.flags == 0 &&
+                    LE16(dc.pkt_len) == 0x0026) {
                 c->got_first = 1;
                 tmp_hdr.dc = dc;
             }
@@ -259,6 +266,7 @@ int read_from_client(login_client_t *c) {
         }
 
         switch(c->type) {
+            case CLIENT_TYPE_DCNTE:
             case CLIENT_TYPE_DC:
             case CLIENT_TYPE_GC:
             case CLIENT_TYPE_EP3:
@@ -288,8 +296,9 @@ int read_from_client(login_client_t *c) {
            by the encryption word-size, it expects the server to pad the packet.
            When Blue Burst does it, it sends padding itself. God only knows what
            the other versions would do (but thankfully, they don't appear to do
-           any of that broken behavior, at least not that I've seen). */
-        if(c->type == CLIENT_TYPE_DC)
+           any of that broken behavior, at least not that I've seen). The DC
+           NTE also has the same bug as JPv1, as expected. */
+        if(c->type == CLIENT_TYPE_DC || c->type == CLIENT_TYPE_DCNTE)
             c->pkt_sz = pkt_sz;
         else
             c->pkt_sz = sz;
@@ -325,6 +334,7 @@ int read_from_client(login_client_t *c) {
 process:
     /* Pass it onto the correct handler. */
     switch(c->type) {
+        case CLIENT_TYPE_DCNTE:
         case CLIENT_TYPE_DC:
         case CLIENT_TYPE_PC:
         case CLIENT_TYPE_GC:

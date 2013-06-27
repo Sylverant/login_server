@@ -1,6 +1,6 @@
 /*
     Sylverant Login Server
-    Copyright (C) 2009, 2010, 2011, 2012 Lawrence Sebald
+    Copyright (C) 2009, 2010, 2011, 2012, 2013 Lawrence Sebald
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License version 3
@@ -114,6 +114,10 @@ typedef struct login_client {
     bb_gc_data_t *gc_data;
     bb_security_data_t sec_data;
     int hdr_read;
+
+    /* Only used for the Dreamcast Network Trial Edition */
+    char serial[16];
+    char access_key[16];
 } login_client_t;
 
 /* Privilege levels */
@@ -132,6 +136,7 @@ typedef struct login_client {
 #define CLIENT_TYPE_EP3             3
 #define CLIENT_TYPE_BB_LOGIN        4
 #define CLIENT_TYPE_BB_CHARACTER    5
+#define CLIENT_TYPE_DCNTE           6
 
 #define CLIENT_TYPE_COUNT           4   /* This doesn't include the BB types */
 
@@ -141,7 +146,7 @@ static const char type_codes[][3] __attribute__((unused)) = {
 };
 
 static const int hdr_sizes[] __attribute__((unused)) = {
-    4, 4, 4, 4, 8, 8
+    4, 4, 4, 4, 8, 8, 4
 };
 
 /* Language codes. */

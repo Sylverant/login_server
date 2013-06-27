@@ -124,7 +124,7 @@ int send_dc_welcome(login_client_t *c, uint32_t svect, uint32_t cvect) {
 
     /* Fill in the header */
     if(c->type == CLIENT_TYPE_DC || c->type == CLIENT_TYPE_GC ||
-       c->type == CLIENT_TYPE_EP3) {
+       c->type == CLIENT_TYPE_EP3 || c->type == CLIENT_TYPE_DCNTE) {
         pkt->hdr.dc.pkt_len = LE16(DC_WELCOME_LENGTH);
         pkt->hdr.dc.pkt_type = LOGIN_WELCOME_TYPE;
     }
@@ -176,7 +176,7 @@ static int send_large_msg_dc(login_client_t *c, const char msg[]) {
     char *outptr;
 
     if(c->type == CLIENT_TYPE_DC || c->type == CLIENT_TYPE_GC ||
-       c->type == CLIENT_TYPE_EP3) {
+       c->type == CLIENT_TYPE_EP3 || c->type == CLIENT_TYPE_DCNTE) {
         if(msg[1] == 'J') {
             ic = iconv_open("SHIFT_JIS", "UTF-8");
         }
@@ -210,7 +210,8 @@ static int send_large_msg_dc(login_client_t *c, const char msg[]) {
     }
 
     /* Fill in the header */
-    if(c->type == CLIENT_TYPE_DC || c->type == CLIENT_TYPE_GC) {
+    if(c->type == CLIENT_TYPE_DC || c->type == CLIENT_TYPE_GC ||
+       c->type == CLIENT_TYPE_DCNTE) {
         pkt->hdr.dc.pkt_type = MSG_BOX_TYPE;
         pkt->hdr.dc.flags = 0;
         pkt->hdr.dc.pkt_len = LE16(size);
@@ -268,6 +269,7 @@ static int send_msg_bb(login_client_t *c, const char msg[]) {
 int send_large_msg(login_client_t *c, const char msg[]) {
     /* Call the appropriate function. */
     switch(c->type) {
+        case CLIENT_TYPE_DCNTE:
         case CLIENT_TYPE_DC:
         case CLIENT_TYPE_GC:
         case CLIENT_TYPE_PC:
@@ -292,7 +294,7 @@ int send_dc_security(login_client_t *c, uint32_t gc, const void *data,
 
     /* Fill in the header */
     if(c->type == CLIENT_TYPE_DC || c->type == CLIENT_TYPE_GC ||
-       c->type == CLIENT_TYPE_EP3) {
+       c->type == CLIENT_TYPE_EP3 || c->type == CLIENT_TYPE_DCNTE) {
         pkt->hdr.dc.pkt_type = SECURITY_TYPE;
         pkt->hdr.dc.pkt_len = LE16((0x0C + data_len));
     }
@@ -372,7 +374,7 @@ static int send_redirect_dc(login_client_t *c, in_addr_t ip, uint16_t port) {
 
     /* Fill in the header */
     if(c->type == CLIENT_TYPE_DC || c->type == CLIENT_TYPE_GC ||
-       c->type == CLIENT_TYPE_EP3) {
+       c->type == CLIENT_TYPE_EP3 || c->type == CLIENT_TYPE_DCNTE) {
         pkt->hdr.dc.pkt_type = REDIRECT_TYPE;
         pkt->hdr.dc.pkt_len = LE16(DC_REDIRECT_LENGTH);
     }
@@ -392,6 +394,7 @@ static int send_redirect_dc(login_client_t *c, in_addr_t ip, uint16_t port) {
 int send_redirect(login_client_t *c, in_addr_t ip, uint16_t port) {
     /* Call the appropriate function. */
     switch(c->type) {
+        case CLIENT_TYPE_DCNTE:
         case CLIENT_TYPE_DC:
         case CLIENT_TYPE_PC:
         case CLIENT_TYPE_GC:
@@ -417,7 +420,7 @@ static int send_redirect6_dc(login_client_t *c, const uint8_t ip[16],
 
     /* Fill in the header */
     if(c->type == CLIENT_TYPE_DC || c->type == CLIENT_TYPE_GC ||
-       c->type == CLIENT_TYPE_EP3) {
+       c->type == CLIENT_TYPE_EP3 || c->type == CLIENT_TYPE_DCNTE) {
         pkt->hdr.dc.pkt_type = REDIRECT_TYPE;
         pkt->hdr.dc.pkt_len = LE16(DC_REDIRECT6_LENGTH);
         pkt->hdr.dc.flags = 6;
@@ -439,6 +442,7 @@ static int send_redirect6_dc(login_client_t *c, const uint8_t ip[16],
 int send_redirect6(login_client_t *c, const uint8_t ip[16], uint16_t port) {
     /* Call the appropriate function. */
     switch(c->type) {
+        case CLIENT_TYPE_DCNTE:
         case CLIENT_TYPE_DC:
         case CLIENT_TYPE_PC:
         case CLIENT_TYPE_GC:
@@ -500,7 +504,7 @@ static int send_timestamp_dc(login_client_t *c) {
 
     /* Fill in the header */
     if(c->type == CLIENT_TYPE_DC || c->type == CLIENT_TYPE_GC ||
-       c->type == CLIENT_TYPE_EP3) {
+       c->type == CLIENT_TYPE_EP3 || c->type == CLIENT_TYPE_DCNTE) {
         pkt->hdr.dc.pkt_type = TIMESTAMP_TYPE;
         pkt->hdr.dc.pkt_len = LE16(DC_TIMESTAMP_LENGTH);
     }
@@ -556,6 +560,7 @@ static int send_timestamp_bb(login_client_t *c) {
 int send_timestamp(login_client_t *c) {
     /* Call the appropriate function */
     switch(c->type) {
+        case CLIENT_TYPE_DCNTE:
         case CLIENT_TYPE_DC:
         case CLIENT_TYPE_PC:
         case CLIENT_TYPE_GC:
@@ -1306,6 +1311,7 @@ out:
 int send_ship_list(login_client_t *c, uint16_t menu_code) {
     /* Call the appropriate function */
     switch(c->type) {
+        case CLIENT_TYPE_DCNTE:
         case CLIENT_TYPE_DC:
         case CLIENT_TYPE_GC:
         case CLIENT_TYPE_EP3:
@@ -1329,7 +1335,7 @@ static int send_info_reply_dc(login_client_t *c, const char msg[]) {
     char *outptr;
 
     if(c->type == CLIENT_TYPE_DC || c->type == CLIENT_TYPE_GC ||
-       c->type == CLIENT_TYPE_EP3) {
+       c->type == CLIENT_TYPE_EP3 || c->type == CLIENT_TYPE_DCNTE) {
         if(msg[1] == 'J') {
             ic = iconv_open("SHIFT_JIS", "UTF-8");
         }
@@ -1368,7 +1374,7 @@ static int send_info_reply_dc(login_client_t *c, const char msg[]) {
 
     /* Fill in the header */
     if(c->type == CLIENT_TYPE_DC || c->type == CLIENT_TYPE_GC ||
-       c->type == CLIENT_TYPE_EP3) {
+       c->type == CLIENT_TYPE_EP3 || c->type == CLIENT_TYPE_DCNTE) {
         pkt->hdr.dc.pkt_type = INFO_REPLY_TYPE;
         pkt->hdr.dc.flags = 0;
         pkt->hdr.dc.pkt_len = LE16(out);
@@ -1429,6 +1435,7 @@ static int send_info_reply_bb(login_client_t *c, const char msg[],
 int send_info_reply(login_client_t *c, const char msg[]) {
     /* Call the appropriate function. */
     switch(c->type) {
+        case CLIENT_TYPE_DCNTE:
         case CLIENT_TYPE_DC:
         case CLIENT_TYPE_PC:
         case CLIENT_TYPE_GC:
@@ -1482,6 +1489,7 @@ static int send_simple_pc(login_client_t *c, int type, int flags) {
 int send_simple(login_client_t *c, int type, int flags) {
     /* Call the appropriate function. */
     switch(c->type) {
+        case CLIENT_TYPE_DCNTE:
         case CLIENT_TYPE_DC:
         case CLIENT_TYPE_GC:
         case CLIENT_TYPE_EP3:

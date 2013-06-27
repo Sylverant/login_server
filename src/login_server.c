@@ -1,6 +1,6 @@
 /*
     Sylverant Login Server
-    Copyright (C) 2009, 2010, 2011 Lawrence Sebald
+    Copyright (C) 2009, 2010, 2011, 2013 Lawrence Sebald
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License version 3
@@ -44,16 +44,16 @@
 #include "login_packets.h"
 
 #ifndef ENABLE_IPV6
-#define NUM_DCSOCKS  2
+#define NUM_DCSOCKS  3
 #define NUM_PCSOCKS  1
-#define NUM_GCSOCKS  3
+#define NUM_GCSOCKS  2
 #define NUM_EP3SOCKS 3
 #define NUM_WEBSOCKS 1
 #define NUM_BBSOCKS  2
 #else
-#define NUM_DCSOCKS  4
+#define NUM_DCSOCKS  6
 #define NUM_PCSOCKS  2
-#define NUM_GCSOCKS  6
+#define NUM_GCSOCKS  4
 #define NUM_EP3SOCKS 6
 #define NUM_WEBSOCKS 2
 #define NUM_BBSOCKS  4
@@ -62,9 +62,11 @@
 static const int dcports[NUM_DCSOCKS][2] = {
     { AF_INET , 9200 },
     { AF_INET , 9201 },
+    { AF_INET , 9000 },                 /* Dreamcast Network Trial Edition */
 #ifdef ENABLE_IPV6
     { AF_INET6, 9200 },
-    { AF_INET6, 9201 }
+    { AF_INET6, 9201 },
+    { AF_INET6, 9000 }
 #endif
 };
 
@@ -77,11 +79,9 @@ static const int pcports[NUM_PCSOCKS][2] = {
 
 static const int gcports[NUM_GCSOCKS][2] = {
     { AF_INET , 9100 },
-    { AF_INET , 9000 },
     { AF_INET , 9001 },
 #ifdef ENABLE_IPV6
     { AF_INET6, 9100 },
-    { AF_INET6, 9000 },
     { AF_INET6, 9001 }
 #endif
 };
@@ -128,7 +128,7 @@ static int dont_daemonize = 0;
 /* Print information about this program to stdout. */
 static void print_program_info() {
     printf("Sylverant Login Server version %s\n", VERSION);
-    printf("Copyright (C) 2009, 2010, 2011 Lawrence Sebald\n\n");
+    printf("Copyright (C) 2009, 2010, 2011, 2012, 2013 Lawrence Sebald\n\n");
     printf("This program is free software: you can redistribute it and/or\n"
            "modify it under the terms of the GNU Affero General Public\n"
            "License version 3 as published by the Free Software Foundation.\n\n"
@@ -281,25 +281,22 @@ int ship_transfer(login_client_t *c, uint32_t shipid) {
     sprintf(query, "SELECT ip, port, ship_ip6_high, ship_ip6_low FROM "
             "online_ships WHERE ship_id='%lu'", (unsigned long)shipid);
 
-    if(sylverant_db_query(&conn, query)) {
+    if(sylverant_db_query(&conn, query))
         return -1;
-    }
 
-    if(!(result = sylverant_db_result_store(&conn))) {
+    if(!(result = sylverant_db_result_store(&conn)))
         return -2;
-    }
 
-    if(!(row = sylverant_db_result_fetch(result))) {
+    if(!(row = sylverant_db_result_fetch(result)))
         return -3;
-    }
 
     /* Grab the data from the row */
-    if(c->type != CLIENT_TYPE_BB_CHARACTER) {
+    if(c->type < CLIENT_TYPE_BB_CHARACTER)
         port = (uint16_t)strtoul(row[1], NULL, 0) + c->type;
-    }
-    else {
+    else if(c->type == CLIENT_TYPE_DCNTE)
+        port = (uint16_t)strtoul(row[1], NULL, 0);
+    else
         port = (uint16_t)strtoul(row[1], NULL, 0) + 4;
-    }
 
 #ifdef ENABLE_IPV6
     if(row[2] && row[3]) {
@@ -445,7 +442,7 @@ static void run_server(int dcsocks[NUM_DCSOCKS], int pcsocks[NUM_PCSOCKS],
                     debug(DBG_LOG, "Accepted Dreamcast connection from %s "
                           "on port %d\n", ipstr, dcports[j][1]);
 
-                    if(!create_connection(asock, CLIENT_TYPE_DC,addr_p, len)) {
+                    if(!create_connection(asock, CLIENT_TYPE_DC, addr_p, len)) {
                         close(asock);
                     }
                     else {
