@@ -1,6 +1,6 @@
 /*
     Sylverant Login Server
-    Copyright (C) 2009, 2010, 2011, 2012 Lawrence Sebald
+    Copyright (C) 2009, 2010, 2011, 2012, 2013 Lawrence Sebald
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License version 3
@@ -776,6 +776,9 @@ static int send_ship_list_dc(login_client_t *c, uint16_t menu_code) {
     }
     else if(c->type == CLIENT_TYPE_EP3) {
         flags = 0x100;
+    }
+    else if(c->type == CLIENT_TYPE_DCNTE) {
+        flags = 0x400;
     }
     else {
         if(c->version == SYLVERANT_QUEST_V1) {
