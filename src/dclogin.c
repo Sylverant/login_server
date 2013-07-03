@@ -226,9 +226,11 @@ static int is_gc_online(uint32_t gc) {
 
 /* Handle a client's login request packet. */
 static int handle_ntelogin(login_client_t *c, dcnte_login_88_pkt *pkt) {
-    char query[256];
+    char query[256], serial[64], access[64];
+    void *result;
+    char **row;
     time_t banlen;
-    int banned = is_ip_banned(c, &banlen, query);
+    int banned = is_ip_banned(c, &banlen, query), resp = LOGIN_88_NEW_USER;
 
     /* Make sure the user isn't IP banned. */
     if(banned == -1) {
@@ -241,11 +243,38 @@ static int handle_ntelogin(login_client_t *c, dcnte_login_88_pkt *pkt) {
         return -1;
     }
 
-    c->type = CLIENT_TYPE_DCNTE;
-    memcpy(c->serial, pkt->serial, 16);
-    memcpy(c->access_key, pkt->access_key, 16);
+    /* Escape all the important strings. */
+    sylverant_db_escape_str(&conn, serial, pkt->serial, 16);
+    sylverant_db_escape_str(&conn, access, pkt->access_key, 16);
 
-    return send_simple(c, LOGIN_88_TYPE, 0);
+    sprintf(query, "SELECT guildcard FROM dreamcast_nte_clients WHERE "
+            "serial_number='%s' AND access_key='%s'", serial, access);
+
+    /* If we can't query the database, fail. */
+    if(sylverant_db_query(&conn, query)) {
+        send_large_msg(c, __(c, "\tEInternal Server Error.\n"
+                             "Please try again later."));
+        return -1;
+    }
+
+    result = sylverant_db_result_store(&conn);
+
+    if((row = sylverant_db_result_fetch(result))) {
+        /* We have seen this client before, set the response code properly. */
+        resp = LOGIN_88_OK;
+        sylverant_db_result_free(result);
+    }
+    else {
+        sylverant_db_result_free(result);
+        memcpy(c->serial, pkt->serial, 16);
+        memcpy(c->access_key, pkt->access_key, 16);
+    }
+
+    c->type = CLIENT_TYPE_DCNTE;
+
+    /* We should check to see if the client exists here, and get it to send us
+       an 0x8a if it doesn't. Otherwise, we should have it send an 0x8b. */
+    return send_simple(c, LOGIN_88_TYPE, resp);
 }
 
 static int handle_ntelogin8a(login_client_t *c, dcnte_login_8a_pkt *pkt) {
@@ -352,8 +381,94 @@ static int handle_ntelogin8a(login_client_t *c, dcnte_login_8a_pkt *pkt) {
         sylverant_db_result_free(result);
     }
 
-    /* Not really sure this is what we should be doing here, but it seems to
-       work, so we'll roll with it for now. */
+    /* Force the client to send us an 0x8B to finish the login. */
+    return send_simple(c, LOGIN_8A_TYPE, LOGIN_8A_REGISTER_OK);
+}
+
+static int handle_ntelogin8b(login_client_t *c, dcnte_login_8b_pkt *pkt) {
+    uint32_t gc;
+    char query[256], dc_id[32], serial[64], access[64];
+    void *result;
+    char **row;
+    int banned;
+    time_t banlen;
+
+    /* Escape all the important strings. */
+    sylverant_db_escape_str(&conn, dc_id, (char *)pkt->dc_id, 8);
+    sylverant_db_escape_str(&conn, serial, pkt->serial, 16);
+    sylverant_db_escape_str(&conn, access, pkt->access_key, 16);
+
+    sprintf(query, "SELECT guildcard FROM dreamcast_nte_clients WHERE "
+            "dc_id='%s' AND serial_number='%s' AND access_key='%s'", dc_id,
+            serial, access);
+
+    /* If we can't query the database, fail. */
+    if(sylverant_db_query(&conn, query)) {
+        send_large_msg(c, __(c, "\tEInternal Server Error.\n"
+                             "Please try again later."));
+        return -1;
+    }
+
+    result = sylverant_db_result_store(&conn);
+
+    if((row = sylverant_db_result_fetch(result))) {
+        /* We have seen this client before, save their guildcard for use. */
+        gc = (uint32_t)strtoul(row[0], NULL, 0);
+        sylverant_db_result_free(result);
+    }
+    else {
+        sylverant_db_result_free(result);
+        send_large_msg(c, __(c, "\tEInternal Server Error.\n"
+                             "Please try again later."));
+        return -1;
+    }
+
+    /* Make sure the guildcard isn't banned. */
+    banned = is_gc_banned(gc, &banlen, query);
+
+    if(banned == -1) {
+        send_large_msg(c, __(c, "\tEInternal Server Error.\n"
+                             "Please try again later."));
+        return -1;
+    }
+    else if(banned) {
+        send_ban_msg(c, banlen, query);
+        return -1;
+    }
+
+    /* Make sure the guildcard isn't online already. */
+    banned = is_gc_online(gc);
+
+    if(banned == -1) {
+        send_large_msg(c, __(c, "\tEInternal Server Error.\n"
+                             "Please try again later."));
+        return -1;
+    }
+    else if(banned) {
+        send_large_msg(c, __(c, "\tEYour guildcard is already online."));
+        return -1;
+    }
+
+    /* Check if the user is a GM or not. */
+    sprintf(query, "SELECT privlevel FROM account_data NATURAL JOIN guildcards "
+            "WHERE guildcard='%u'", gc);
+
+    if(sylverant_db_query(&conn, query)) {
+        send_large_msg(c, __(c, "\tEInternal Server Error.\n"
+                             "Please try again later."));
+        return -1;
+    }
+
+    result = sylverant_db_result_store(&conn);
+
+    if(result) {
+        if((row = sylverant_db_result_fetch(result))) {
+            c->is_gm = atoi(row[0]);
+        }
+
+        sylverant_db_result_free(result);
+    }
+
     send_dc_security(c, gc, NULL, 0);
     return send_ship_list(c, 0);
 }
@@ -1146,6 +1261,10 @@ int process_dclogin_packet(login_client_t *c, void *pkt) {
         case LOGIN_8A_TYPE:
             /* XXXX: Uhm... Sega... WTF? */
             return handle_ntelogin8a(c, (dcnte_login_8a_pkt *)pkt);
+
+        case LOGIN_8B_TYPE:
+            /* XXXX: Maybe this will fix things? */
+            return handle_ntelogin8b(c, (dcnte_login_8b_pkt *)pkt);
 
         case LOGIN_90_TYPE:
             /* XXXX: Hey! this does something now! */
