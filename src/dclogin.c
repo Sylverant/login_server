@@ -291,8 +291,8 @@ static int handle_ntelogin8a(login_client_t *c, dcnte_login_8a_pkt *pkt) {
     sylverant_db_escape_str(&conn, access, c->access_key, 16);
 
     sprintf(query, "SELECT guildcard FROM dreamcast_nte_clients WHERE "
-            "dc_id='%s' AND serial_number='%s' AND access_key='%s'", dc_id,
-            serial, access);
+            "(dc_id='%s' OR dc_id IS NULL) AND serial_number='%s' AND "
+            "access_key='%s'", dc_id, serial, access);
 
     /* If we can't query the database, fail. */
     if(sylverant_db_query(&conn, query)) {
@@ -399,8 +399,8 @@ static int handle_ntelogin8b(login_client_t *c, dcnte_login_8b_pkt *pkt) {
     sylverant_db_escape_str(&conn, access, pkt->access_key, 16);
 
     sprintf(query, "SELECT guildcard FROM dreamcast_nte_clients WHERE "
-            "dc_id='%s' AND serial_number='%s' AND access_key='%s'", dc_id,
-            serial, access);
+            "(dc_id='%s' OR dc_id IS NULL) AND serial_number='%s' AND "
+            "access_key='%s'", dc_id, serial, access);
 
     /* If we can't query the database, fail. */
     if(sylverant_db_query(&conn, query)) {
@@ -535,9 +535,9 @@ static int handle_login3(login_client_t *c, dc_login_93_pkt *pkt) {
     sylverant_db_escape_str(&conn, serial, pkt->serial, 8);
     sylverant_db_escape_str(&conn, access, pkt->access_key, 8);
 
-    sprintf(query, "SELECT guildcard FROM dreamcast_clients WHERE dc_id='%s' "
-            "AND serial_number='%s' AND access_key='%s'", dc_id, serial,
-            access);
+    sprintf(query, "SELECT guildcard FROM dreamcast_clients WHERE (dc_id='%s' "
+            "OR dc_id IS NULL) AND serial_number='%s' AND access_key='%s'",
+            dc_id, serial, access);
 
     /* If we can't query the database, fail. */
     if(sylverant_db_query(&conn, query)) {
@@ -657,8 +657,8 @@ static int handle_logina(login_client_t *c, dcv2_login_9a_pkt *pkt) {
 
     if(c->type != CLIENT_TYPE_PC) {
         sprintf(query, "SELECT guildcard FROM dreamcast_clients WHERE "
-                "dc_id='%s' AND serial_number='%s' AND access_key='%s'", dc_id,
-                serial, access);
+                "(dc_id='%s' OR dc_id IS NULL) AND serial_number='%s' AND "
+                "access_key='%s'", dc_id, serial, access);
     }
     else {
         sprintf(query, "SELECT guildcard FROM pc_clients WHERE "
