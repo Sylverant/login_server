@@ -47,14 +47,14 @@
 #define NUM_DCSOCKS  3
 #define NUM_PCSOCKS  1
 #define NUM_GCSOCKS  2
-#define NUM_EP3SOCKS 3
+#define NUM_EP3SOCKS 4
 #define NUM_WEBSOCKS 1
 #define NUM_BBSOCKS  2
 #else
 #define NUM_DCSOCKS  6
 #define NUM_PCSOCKS  2
 #define NUM_GCSOCKS  4
-#define NUM_EP3SOCKS 6
+#define NUM_EP3SOCKS 8
 #define NUM_WEBSOCKS 2
 #define NUM_BBSOCKS  4
 #endif
@@ -90,10 +90,12 @@ static const int ep3ports[NUM_EP3SOCKS][2] = {
     { AF_INET , 9103 },
     { AF_INET , 9003 },
     { AF_INET , 9203 },
+    { AF_INET , 9002 },
 #ifdef ENABLE_IPV6
     { AF_INET6, 9103 },
     { AF_INET6, 9003 },
-    { AF_INET6, 9203 }
+    { AF_INET6, 9203 },
+    { AF_INET6, 9002 }
 #endif
 };
 
