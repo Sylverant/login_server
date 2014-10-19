@@ -1088,13 +1088,12 @@ void cleanup_param_data(void) {
 }
 
 int load_bb_char_data(void) {
+    FILE *fp;
     int i;
     char filename[64];
-    FILE *fp;
     sylverant_bb_db_char_t *cur;
-    uint8_t *buf, *buf2;
-    long size;
-    uint32_t decsize;
+    uint8_t *buf;
+    int decsize;
 
     chdir("blueburst");
 
@@ -1130,50 +1129,19 @@ int load_bb_char_data(void) {
 
     /* Read the stats table */
     debug(DBG_LOG, "Loading levelup table.\n");
-    fp = fopen("param/PlyLevelTbl.prs", "rb");
- 
-    if(!fp) {
-        debug(DBG_ERROR, "Missing Blue Burst levelup table!\n");
+
+    /* Read in the file and decompress it. */
+    if((decsize = prs_decompress_file("param/PlyLevelTbl.prs", &buf)) < 0) {
+        debug(DBG_ERROR, "Cannot read BB levelup table: %s\n",
+              strerror(-decsize));
         chdir("..");
         return -2;
     }
 
-    /* Figure out how long it is and read it in... */
-    fseek(fp, 0, SEEK_END);
-    size = ftell(fp);
-    fseek(fp, 0, SEEK_SET);
-
-    buf = (uint8_t *)malloc(size);
-    if(!buf) {
-        debug(DBG_ERROR, "Couldn't allocate space for level table.\n%s\n",
-              strerror(errno));
-        fclose(fp);
-        chdir("..");
-        return -3;
-    }
-
-    fread(buf, 1, size, fp);
-    fclose(fp);
-
-    /* Decompress the data */
-    decsize = prs_decompress_size(buf);
-    buf2 = (uint8_t *)malloc(decsize);
-
-    if(!buf2) {
-        debug(DBG_ERROR, "Couldn't allocate space for decompressing level "
-              "table.\n%s\n", strerror(errno));
-        fclose(fp);
-        free(buf);
-        chdir("..");
-        return -4;
-    }
-
-    prs_decompress(buf, buf2);
-    memcpy(&char_stats, buf2, sizeof(bb_level_table_t));
+    memcpy(&char_stats, buf, sizeof(bb_level_table_t));
 
     /* Clean up... */
     free(buf);
-    free(buf2);
     chdir("..");
 
     return 0;
