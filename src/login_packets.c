@@ -1,6 +1,6 @@
 /*
     Sylverant Login Server
-    Copyright (C) 2009, 2010, 2011, 2012, 2013 Lawrence Sebald
+    Copyright (C) 2009, 2010, 2011, 2012, 2013, 2015 Lawrence Sebald
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License version 3
@@ -344,7 +344,7 @@ int send_bb_security(login_client_t *c, uint32_t gc, uint32_t err,
         memcpy(pkt->security_data, data, data_len);
 
     /* Send the packet away */
-    return crypt_send(c, BB_SECURITY_LENGTH);    
+    return crypt_send(c, BB_SECURITY_LENGTH);
 }
 
 /* Send a redirect packet to the given client. */
@@ -517,7 +517,7 @@ static int send_timestamp_dc(login_client_t *c) {
     gettimeofday(&rawtime, NULL);
 
     /* Get UTC */
-    gmtime_r(&rawtime.tv_sec, &cooked);    
+    gmtime_r(&rawtime.tv_sec, &cooked);
 
     /* Fill in the timestamp */
     sprintf(pkt->timestamp, "%u:%02u:%02u: %02u:%02u:%02u.%03u",
@@ -545,7 +545,7 @@ static int send_timestamp_bb(login_client_t *c) {
     gettimeofday(&rawtime, NULL);
 
     /* Get UTC */
-    gmtime_r(&rawtime.tv_sec, &cooked);    
+    gmtime_r(&rawtime.tv_sec, &cooked);
 
     /* Fill in the timestamp */
     sprintf(pkt->timestamp, "%u:%02u:%02u: %02u:%02u:%02u.%03u",
@@ -600,7 +600,7 @@ static int send_initial_menu_dc(login_client_t *c) {
     pkt->entries[2].menu_id = LE32(MENU_ID_INITIAL);
     pkt->entries[2].item_id = LE32(ITEM_ID_INIT_DOWNLOAD);
     pkt->entries[2].flags = LE16(0x0F04);
-    strcpy(pkt->entries[2].name, "Download");
+    strcpy(pkt->entries[2].name, "Download Quest");
 
     /* If the user is a GM, give them a bit more... */
     if(IS_GLOBAL_GM(c)) {
@@ -645,7 +645,8 @@ static int send_initial_menu_pc(login_client_t *c) {
     pkt->entries[2].menu_id = LE32(MENU_ID_INITIAL);
     pkt->entries[2].item_id = LE32(ITEM_ID_INIT_DOWNLOAD);
     pkt->entries[2].flags = LE16(0x0F04);
-    memcpy(pkt->entries[2].name, "D\0o\0w\0n\0l\0o\0a\0d\0", 16);
+    memcpy(pkt->entries[2].name,
+           "D\0o\0w\0n\0l\0o\0a\0d\0 \0Q\0u\0e\0s\0t\0", 28);
 
     /* If the user is a GM, give them a bit more... */
     if(IS_GLOBAL_GM(c)) {
@@ -670,28 +671,28 @@ static int send_initial_menu_pc(login_client_t *c) {
 static int send_initial_menu_gc(login_client_t *c) {
     dc_ship_list_pkt *pkt = (dc_ship_list_pkt *)sendbuf;
     int count = 3, len = 0x74;
-    
+
     /* Clear the base packet */
     memset(pkt, 0, 0x0090);
-    
+
     /* Fill in the "DATABASE/US" entry */
     pkt->entries[0].menu_id = LE32(MENU_ID_DATABASE);
     pkt->entries[0].item_id = 0;
     pkt->entries[0].flags = LE16(0x0004);
     strcpy(pkt->entries[0].name, "DATABASE/US");
     pkt->entries[0].name[0x11] = 0x08;
-    
+
     /* Fill in the "Ship Select" entry */
     pkt->entries[1].menu_id = LE32(MENU_ID_INITIAL);
     pkt->entries[1].item_id = LE32(ITEM_ID_INIT_SHIP);
     pkt->entries[1].flags = LE16(0x0004);
     strcpy(pkt->entries[1].name, "Ship Select");
-    
+
     /* Fill in the "Download" entry */
     pkt->entries[2].menu_id = LE32(MENU_ID_INITIAL);
     pkt->entries[2].item_id = LE32(ITEM_ID_INIT_DOWNLOAD);
     pkt->entries[2].flags = LE16(0x0F04);
-    strcpy(pkt->entries[2].name, "Download");
+    strcpy(pkt->entries[2].name, "Download Quest");
 
     /* Fill in the "Information" entry */
     pkt->entries[3].menu_id = LE32(MENU_ID_INITIAL);
@@ -713,7 +714,7 @@ static int send_initial_menu_gc(login_client_t *c) {
     pkt->hdr.pkt_type = BLOCK_LIST_TYPE;
     pkt->hdr.flags = count;
     pkt->hdr.pkt_len = LE16(len);
-    
+
     /* Send the packet away */
     return crypt_send(c, len);
 }
@@ -906,7 +907,7 @@ static int send_ship_list_dc(login_client_t *c, uint16_t menu_code) {
         pkt->entries[num_ships].item_id = LE32(0x00000000);
         pkt->entries[num_ships].flags = LE16(0x0000);
         strcpy(pkt->entries[num_ships].name, no_ship_msg);
-        
+
         ++num_ships;
         len += 0x1C;
     }
@@ -1956,7 +1957,7 @@ int send_bb_char_preview(login_client_t *c, const sylverant_bb_mini_char_t *mc,
 
     /* Copy in the character data */
     memcpy(&pkt->data, mc, sizeof(sylverant_bb_mini_char_t));
-    
+
     return crypt_send(c, sizeof(bb_char_preview_pkt));
 }
 
@@ -2222,7 +2223,7 @@ static int send_gm_menu_pc(login_client_t *c) {
         ascii_to_utf16("Restart", pkt->entries[count].name, 0x11);
         ++count;
         len += 0x2C;
-        
+
         pkt->entries[count].menu_id = LE32(MENU_ID_GM);
         pkt->entries[count].item_id = LE32(ITEM_ID_GM_SHUTDOWN);
         pkt->entries[count].flags = LE16(0x0004);
