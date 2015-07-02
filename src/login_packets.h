@@ -1,6 +1,6 @@
 /*
     Sylverant Login Server
-    Copyright (C) 2009, 2010, 2011 Lawrence Sebald
+    Copyright (C) 2009, 2010, 2011, 2015 Lawrence Sebald
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License version 3
@@ -151,5 +151,8 @@ int send_gm_menu(login_client_t *c);
 
 /* Send the message of the day to the given client. */
 int send_motd(login_client_t *c);
+
+/* Send the long description of a quest to the given client. */
+int send_quest_description(login_client_t *c, sylverant_quest_t *q);
 
 #endif /* !LOGIN_PACKETS_H */

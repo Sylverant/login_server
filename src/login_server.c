@@ -1,6 +1,6 @@
 /*
     Sylverant Login Server
-    Copyright (C) 2009, 2010, 2011, 2013 Lawrence Sebald
+    Copyright (C) 2009, 2010, 2011, 2013, 2015 Lawrence Sebald
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License version 3
@@ -130,7 +130,7 @@ static int dont_daemonize = 0;
 /* Print information about this program to stdout. */
 static void print_program_info() {
     printf("Sylverant Login Server version %s\n", VERSION);
-    printf("Copyright (C) 2009, 2010, 2011, 2012, 2013 Lawrence Sebald\n\n");
+    printf("Copyright (C) 2009-2015 Lawrence Sebald\n\n");
     printf("This program is free software: you can redistribute it and/or\n"
            "modify it under the terms of the GNU Affero General Public\n"
            "License version 3 as published by the Free Software Foundation.\n\n"
@@ -371,7 +371,7 @@ static void run_server(int dcsocks[NUM_DCSOCKS], int pcsocks[NUM_PCSOCKS],
     ssize_t sent;
     uint32_t client_count;
 
-    for(;;) {        
+    for(;;) {
         /* Clear the fd_sets so we can use them. */
         FD_ZERO(&readfds);
         FD_ZERO(&writefds);

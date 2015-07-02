@@ -2334,3 +2334,64 @@ int send_motd(login_client_t *c) {
     /* Send the message to the client. */
     return send_message_box(c, "%s", buf);
 }
+
+int send_quest_description(login_client_t *c, sylverant_quest_t *q) {
+    dc_msg_box_pkt *pkt = (dc_msg_box_pkt *)sendbuf;
+    int size = 4;
+    iconv_t ic;
+    size_t in, out;
+    ICONV_CONST char *inptr;
+    char *outptr;
+
+    /* If we don't have a description, don't even try. */
+    if(!q->long_desc || q->long_desc[0] == '\0')
+        return 0;
+
+    if(c->type == CLIENT_TYPE_DC || c->type == CLIENT_TYPE_GC ||
+       c->type == CLIENT_TYPE_EP3 || c->type == CLIENT_TYPE_DCNTE) {
+        if(c->language_code == CLIENT_LANG_JAPANESE)
+            ic = iconv_open("SHIFT_JIS", "UTF-8");
+        else
+            ic = iconv_open("ISO-8859-1", "UTF-8");
+    }
+    else {
+        ic = iconv_open("UTF-16LE", "UTF-8");
+    }
+
+    if(ic == (iconv_t)-1) {
+        perror("iconv_open");
+        return -1;
+    }
+
+    /* Convert to the proper encoding */
+    in = strlen(q->long_desc) + 1;
+    out = 65524;
+    inptr = (ICONV_CONST char *)q->long_desc;
+    outptr = (char *)pkt->msg;
+    iconv(ic, &inptr, &in, &outptr, &out);
+    iconv_close(ic);
+
+    /* Figure out how long the packet is */
+    size += 65524 - out;
+
+    /* Pad to a length divisible by 4 */
+    while(size & 0x03) {
+        sendbuf[size++] = 0;
+    }
+
+    /* Fill in the header */
+    if(c->type == CLIENT_TYPE_DC || c->type == CLIENT_TYPE_GC ||
+       c->type == CLIENT_TYPE_DCNTE) {
+        pkt->hdr.dc.pkt_type = DL_QUEST_INFO_TYPE;
+        pkt->hdr.dc.flags = 0;
+        pkt->hdr.dc.pkt_len = LE16(size);
+    }
+    else {
+        pkt->hdr.pc.pkt_type = DL_QUEST_INFO_TYPE;
+        pkt->hdr.pc.flags = 0;
+        pkt->hdr.pc.pkt_len = LE16(size);
+    }
+
+    /* Send the packet away */
+    return crypt_send(c, size);
+}

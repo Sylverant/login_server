@@ -1,6 +1,6 @@
 /*
     Sylverant Login Server
-    Copyright (C) 2009, 2010, 2011, 2013 Lawrence Sebald
+    Copyright (C) 2009, 2010, 2011, 2013, 2015 Lawrence Sebald
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License version 3
@@ -96,7 +96,7 @@ void print_packet(unsigned char *pkt, int len) {
             else {
                 printf(".");
             }
-            
+
             ++pos;
         }
 
@@ -1173,6 +1173,7 @@ static int handle_char_data(login_client_t *c, dc_char_data_pkt *pkt) {
 }
 
 static int handle_info_req(login_client_t *c, dc_select_pkt *pkt) {
+    sylverant_quest_list_t *l = NULL;
     uint32_t menu_id = LE32(pkt->menu_id);
     uint32_t item_id = LE32(pkt->item_id);
     uint16_t menu_code;
@@ -1181,9 +1182,13 @@ static int handle_info_req(login_client_t *c, dc_select_pkt *pkt) {
     void *result;
     char **row;
 
+    /* Don't go out of bounds... */
+    if(c->type < CLIENT_TYPE_DCNTE)
+         l = &qlist[c->type][c->language_code];
+
     switch(menu_id & 0xFF) {
         /* Ship */
-        case 0x01:
+        case MENU_ID_SHIP:
             /* If its a list, say nothing */
             if(item_id == 0) {
                 return send_info_reply(c, __(c, "\tENothing here."));
@@ -1228,6 +1233,17 @@ static int handle_info_req(login_client_t *c, dc_select_pkt *pkt) {
             sylverant_db_result_free(result);
 
             return send_info_reply(c, str);
+
+        /* Quest */
+        case MENU_ID_QUEST:
+            if(!l)
+                return -1;
+
+            /* Make sure the item is valid */
+            if(item_id < l->cats[0].quest_count)
+                return send_quest_description(c, &l->cats[0].quests[item_id]);
+            else
+                return -1;
 
         default:
             /* Ignore any other info requests. */

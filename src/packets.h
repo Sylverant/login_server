@@ -1,6 +1,6 @@
 /*
     Sylverant Ship Server
-    Copyright (C) 2009, 2010, 2011, 2012, 2013, 2014 Lawrence Sebald
+    Copyright (C) 2009, 2010, 2011, 2012, 2013, 2014, 2015 Lawrence Sebald
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License version 3
@@ -1299,14 +1299,14 @@ typedef struct ep3_card_update {
     uint8_t data[];
 } PACKED ep3_card_update_pkt;
 
-/* The packet used to change the music on the Episode 3 jukebox */
-typedef struct ep3_jukebox {
+/* The general format for 0xBA packets... */
+typedef struct ep3_ba {
     dc_pkt_hdr_t hdr;
-    uint32_t unk1;
-    uint32_t unk2;
-    uint16_t unk3;
-    uint16_t music;
-} PACKED ep3_jukebox_pkt;
+    uint32_t meseta;
+    uint32_t total_meseta;
+    uint16_t unused;                    /* Always 0? */
+    uint16_t magic;
+} PACKED ep3_ba_pkt;
 
 /* The packet used to communiate various requests and such to the server from
    Episode 3 */
@@ -1552,6 +1552,7 @@ typedef struct gc_quest_stats {
 #define QUEST_LIST_TYPE                 0x00A2
 #define QUEST_INFO_TYPE                 0x00A3
 #define DL_QUEST_LIST_TYPE              0x00A4
+#define DL_QUEST_INFO_TYPE              0x00A5
 #define DL_QUEST_FILE_TYPE              0x00A6
 #define DL_QUEST_CHUNK_TYPE             0x00A7
 #define QUEST_END_LIST_TYPE             0x00A9
@@ -1723,8 +1724,9 @@ typedef struct gc_quest_stats {
 #define LOGIN_93BB_FORCED_DISCONNECT        12
 
 /* Episode 3 - Types of 0xBA commands. */
+#define EP3_COMMAND_LEAVE_TEAM              1
 #define EP3_COMMAND_JUKEBOX_REQUEST         2
-#define EP3_COMMAND_JUKEBOX_SET             3
+#define EP3_COMMAND_JUKEBOX_REPLY           3
 
 /* Blue Burst - Character Acknowledgement codes. */
 #define BB_CHAR_ACK_UPDATE                  0
