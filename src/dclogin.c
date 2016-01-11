@@ -648,7 +648,7 @@ static int handle_logina(login_client_t *c, dcv2_login_9a_pkt *pkt) {
         return -1;
     }
 
-    c->version = SYLVERANT_QUEST_V1 | SYLVERANT_QUEST_V2;
+    c->version = SYLVERANT_QUEST_V2;
 
     /* Escape all the important strings. */
     sylverant_db_escape_str(&conn, dc_id, pkt->dc_id, 8);
