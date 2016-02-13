@@ -1,6 +1,6 @@
 /*
     Sylverant Login Server
-    Copyright (C) 2009, 2010, 2011, 2013, 2015 Lawrence Sebald
+    Copyright (C) 2009, 2010, 2011, 2013, 2015, 2016 Lawrence Sebald
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License version 3
@@ -130,7 +130,7 @@ static int dont_daemonize = 0;
 /* Print information about this program to stdout. */
 static void print_program_info() {
     printf("Sylverant Login Server version %s\n", VERSION);
-    printf("Copyright (C) 2009-2015 Lawrence Sebald\n\n");
+    printf("Copyright (C) 2009-2016 Lawrence Sebald\n\n");
     printf("This program is free software: you can redistribute it and/or\n"
            "modify it under the terms of the GNU Affero General Public\n"
            "License version 3 as published by the Free Software Foundation.\n\n"
@@ -241,24 +241,37 @@ static void load_config() {
 }
 
 static void load_config2() {
+    char *fn;
+    int i;
+
     /* Attempt to read each quests file... */
     read_quests();
 
     /* Attempt to read the legit items list */
-    if(cfg->limits_file && cfg->limits_file[0]) {
-        if(sylverant_read_limits(cfg->limits_file, &limits)) {
+    if(cfg->limits_enforced != -1) {
+        fn = cfg->limits[cfg->limits_enforced].filename;
+
+        debug(DBG_LOG, "Reading enforced limits file %s (name: %s)...\n", fn,
+              cfg->limits[cfg->limits_enforced].name);
+        if(fn && sylverant_read_limits(fn, &limits)) {
             debug(DBG_WARN, "Cannot read specified limits file\n");
         }
     }
 
-    /* Read the Blue Burst param data */
-    if(load_param_data()) {
-        exit(EXIT_FAILURE);
+    /* Print out the rest... */
+    for(i = 0; i < cfg->limits_count; ++i) {
+        if(!cfg->limits[i].enforce) {
+            debug(DBG_LOG, "Ignoring non-enforced limits file %s (name: %s)\n",
+                  cfg->limits[i].filename, cfg->limits[i].name);
+        }
     }
 
-    if(load_bb_char_data()) {
+    /* Read the Blue Burst param data */
+    if(load_param_data())
         exit(EXIT_FAILURE);
-    }
+
+    if(load_bb_char_data())
+        exit(EXIT_FAILURE);
 
     debug(DBG_LOG, "Connecting to the database...\n");
 
@@ -732,12 +745,10 @@ int main(int argc, char *argv[]) {
 
     load_config();
 
-    if(!custom_dir) {
+    if(!custom_dir)
         chdir(sylverant_directory);
-    }
-    else {
+    else
         chdir(custom_dir);
-    }
 
     /* If we're supposed to daemonize, do it now. */
     if(!dont_daemonize) {
