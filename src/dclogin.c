@@ -1,6 +1,6 @@
 /*
     Sylverant Login Server
-    Copyright (C) 2009, 2010, 2011, 2013, 2015 Lawrence Sebald
+    Copyright (C) 2009, 2010, 2011, 2013, 2015, 2017 Lawrence Sebald
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License version 3
@@ -33,7 +33,9 @@
 #include "player.h"
 #include "login_packets.h"
 
+#ifdef HAVE_LIBMINI18N
 mini18n_t langs[CLIENT_LANG_COUNT];
+#endif
 
 extern sylverant_dbconn_t conn;
 extern sylverant_quest_list_t qlist[CLIENT_TYPE_COUNT][CLIENT_LANG_COUNT];
@@ -769,14 +771,12 @@ static int handle_gchlcheck(login_client_t *c, gc_hlcheck_pkt *pkt) {
     /* Check the version code of the connecting client since some clients seem
        to want to connect on wonky ports... */
     switch(pkt->version) {
-        case 0x30: /* PSO Episode 1 & 2 (non plus...) */
-        case 0x31:
-        case 0x33:
-        case 0x34:
-        case 0x32: /* PSO Episode 1 & 2 Plus */
-        case 0x35:
-        case 0x36:
-        case 0x39:
+        case 0x30: /* Episode 1 & 2 (Japanese) */
+        case 0x31: /* Episode 1 & 2 (US 1.0/1.01) */
+        case 0x32: /* Episode 1 & 2 (Europe, 50hz) */
+        case 0x33: /* Episode 1 & 2 (Europe, 60hz) */
+        case 0x36: /* Episode 1 & 2 Plus (US) */
+        case 0x39: /* Episode 1 & 2 Plus (Japan) */
             c->type = CLIENT_TYPE_GC;
             break;
 
@@ -789,6 +789,7 @@ static int handle_gchlcheck(login_client_t *c, gc_hlcheck_pkt *pkt) {
 
         default:
             debug(DBG_LOG, "Unknown version code: %02x\n", pkt->version);
+            c->type = CLIENT_TYPE_GC;
     }
 
     /* Make sure the user isn't IP banned. */
