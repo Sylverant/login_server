@@ -77,7 +77,7 @@ typedef struct bb_level_table {
 /* Login server client structure. */
 typedef struct login_client {
     TAILQ_ENTRY(login_client) qentry;
-    
+
     int type;
     int sock;
     int disconnected;

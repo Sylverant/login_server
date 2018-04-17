@@ -1,6 +1,6 @@
 /*
     Sylverant Login Server
-    Copyright (C) 2009, 2010, 2011, 2013, 2015, 2017 Lawrence Sebald
+    Copyright (C) 2009, 2010, 2011, 2013, 2015, 2017, 2018 Lawrence Sebald
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License version 3
@@ -775,6 +775,7 @@ static int handle_gchlcheck(login_client_t *c, gc_hlcheck_pkt *pkt) {
         case 0x31: /* Episode 1 & 2 (US 1.0/1.01) */
         case 0x32: /* Episode 1 & 2 (Europe, 50hz) */
         case 0x33: /* Episode 1 & 2 (Europe, 60hz) */
+        case 0x34: /* Episode 1 & 2 (Japan, v1.03) */
         case 0x36: /* Episode 1 & 2 Plus (US) */
         case 0x39: /* Episode 1 & 2 Plus (Japan) */
             c->type = CLIENT_TYPE_GC;
@@ -1407,37 +1408,37 @@ int process_dclogin_packet(login_client_t *c, void *pkt) {
 /* Initialize mini18n support. */
 void init_i18n(void) {
 #ifdef HAVE_LIBMINI18N
-	int i;
-	char filename[256];
+    int i;
+    char filename[256];
 
-	for(i = 0; i < CLIENT_LANG_COUNT; ++i) {
-		langs[i] = mini18n_create();
+    for(i = 0; i < CLIENT_LANG_COUNT; ++i) {
+        langs[i] = mini18n_create();
 
-		if(langs[i]) {
-			sprintf(filename, "l10n/login_server-%s.yts", language_codes[i]);
+        if(langs[i]) {
+            sprintf(filename, "l10n/login_server-%s.yts", language_codes[i]);
 
-			/* Attempt to load the l10n file. */
-			if(mini18n_load(langs[i], filename)) {
-				/* If we didn't get it, clean up. */
-				mini18n_destroy(langs[i]);
-				langs[i] = NULL;
-			}
-			else {
-				debug(DBG_LOG, "Read l10n file for %s\n", language_codes[i]);
-			}
-		}
-	}
+            /* Attempt to load the l10n file. */
+            if(mini18n_load(langs[i], filename)) {
+                /* If we didn't get it, clean up. */
+                mini18n_destroy(langs[i]);
+                langs[i] = NULL;
+            }
+            else {
+                debug(DBG_LOG, "Read l10n file for %s\n", language_codes[i]);
+            }
+        }
+    }
 #endif
 }
 
 /* Clean up when we're done with mini18n. */
 void cleanup_i18n(void) {
 #ifdef HAVE_LIBMINI18N
-	int i;
+    int i;
 
-	/* Just call the destroy function... It'll handle null values fine. */
-	for(i = 0; i < CLIENT_LANG_COUNT; ++i) {
-		mini18n_destroy(langs[i]);
-	}
+    /* Just call the destroy function... It'll handle null values fine. */
+    for(i = 0; i < CLIENT_LANG_COUNT; ++i) {
+        mini18n_destroy(langs[i]);
+    }
 #endif
 }
