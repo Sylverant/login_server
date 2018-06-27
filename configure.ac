@@ -64,9 +64,7 @@ AC_TYPE_UINT8_T
 AC_C_BIGENDIAN
 
 # Checks for library functions.
-AC_FUNC_MALLOC
-AC_FUNC_REALLOC
-AC_CHECK_FUNCS([gethostname gettimeofday inet_ntoa memmove memset select socket strtoul])
+AC_CHECK_FUNCS([malloc realloc gethostname gettimeofday inet_ntoa memmove memset select socket strtoul])
 
 ADD_CFLAGS([-Wall])
 
