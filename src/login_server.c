@@ -1027,6 +1027,7 @@ int main(int argc, char *argv[]) {
     }
 
 restart:
+    shutting_down = 0;
     load_config2();
 
     /* Init mini18n if we have it. */
