@@ -1,8 +1,8 @@
-#  
+#
 #   This file is part of Sylverant PSO Server.
-#  
-#   Copyright (C) 2009, 2011 Lawrence Sebald
-#  
+#
+#   Copyright (C) 2009, 2011, 2018 Lawrence Sebald
+#
 #   This program is free software: you can redistribute it and/or modify
 #   it under the terms of the GNU Affero General Public License version 3
 #   as published by the Free Software Foundation.
@@ -23,6 +23,11 @@ bin_PROGRAMS = login_server
 login_server_SOURCES = src/dclogin.c src/login.c src/login.h \
                        src/login_packets.c src/login_packets.h \
                        src/login_server.c src/bblogin.c src/bbcharacter.c
+
+if NEED_PIDFILE
+AM_CFLAGS += -DNEED_PIDFILE=1
+login_server_SOURCES += src/pidfile.c
+endif
 
 datarootdir = @datarootdir@
 
