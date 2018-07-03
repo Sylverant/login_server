@@ -1,6 +1,6 @@
 /*
     Sylverant Login Server
-    Copyright (C) 2009, 2010, 2011, 2013, 2015, 2016 Lawrence Sebald
+    Copyright (C) 2009, 2010, 2011, 2013, 2015, 2016, 2018 Lawrence Sebald
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License version 3
@@ -24,6 +24,9 @@
 #include <netdb.h>
 #include <unistd.h>
 #include <ctype.h>
+#include <signal.h>
+#include <pwd.h>
+#include <grp.h>
 #include <sys/time.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
@@ -40,8 +43,29 @@
 #include <sylverant/quest.h>
 #include <sylverant/items.h>
 
+#if HAVE_LIBUTIL_H == 1
+#include <libutil.h>
+#elif HAVE_BSD_LIBUTIL_H == 1
+#include <bsd/libutil.h>
+#else
+/* From pidfile.c */
+struct pidfh;
+struct pidfh *pidfile_open(const char *path, mode_t mode, pid_t *pidptr);
+int pidfile_write(struct pidfh *pfh);
+int pidfile_remove(struct pidfh *pfh);
+int pidfile_fileno(struct pidfh *pfh);
+#endif
+
 #include "login.h"
 #include "login_packets.h"
+
+#ifndef PID_DIR
+#define PID_DIR "/var/run"
+#endif
+
+#ifndef RUNAS_DEFAULT
+#define RUNAS_DEFAULT "sylverant"
+#endif
 
 #ifndef ENABLE_IPV6
 #define NUM_DCSOCKS  3
@@ -121,16 +145,19 @@ sylverant_config_t *cfg;
 sylverant_limits_t *limits = NULL;
 
 sylverant_quest_list_t qlist[CLIENT_TYPE_COUNT][CLIENT_LANG_COUNT];
-int shutting_down = 0;
+volatile sig_atomic_t shutting_down = 0;
 
 static const char *config_file = NULL;
 static const char *custom_dir = NULL;
 static int dont_daemonize = 0;
+static const char *pidfile_name = NULL;
+static struct pidfh *pf = NULL;
+static const char *runas_user = RUNAS_DEFAULT;
 
 /* Print information about this program to stdout. */
 static void print_program_info() {
     printf("Sylverant Login Server version %s\n", VERSION);
-    printf("Copyright (C) 2009-2016 Lawrence Sebald\n\n");
+    printf("Copyright (C) 2009-2018 Lawrence Sebald\n\n");
     printf("This program is free software: you can redistribute it and/or\n"
            "modify it under the terms of the GNU Affero General Public\n"
            "License version 3 as published by the Free Software Foundation.\n\n"
@@ -155,9 +182,13 @@ static void print_help(const char *bin) {
            "                default one.\n"
            "-D directory    Use the specified directory as the root\n"
            "--nodaemon      Don't daemonize\n"
+           "-P filename     Use the specified name for the pid file to write\n"
+           "                instead of the default.\n"
+           "-U username     Run as the specified user instead of '%s'\n"
            "--help          Print this help and exit\n\n"
            "Note that if more than one verbosity level is specified, the last\n"
-           "one specified will be used. The default is --verbose.\n", bin);
+           "one specified will be used. The default is --verbose.\n", bin,
+           RUNAS_DEFAULT);
 }
 
 /* Parse any command-line arguments passed in. */
@@ -180,14 +211,44 @@ static void parse_command_line(int argc, char *argv[]) {
         }
         else if(!strcmp(argv[i], "-C")) {
             /* Save the config file's name. */
+            if(i == argc - 1) {
+                printf("-C requires an argument!\n\n");
+                print_help(argv[0]);
+                exit(EXIT_FAILURE);
+            }
+
             config_file = argv[++i];
         }
         else if(!strcmp(argv[i], "-D")) {
             /* Save the custom dir */
+            if(i == argc - 1) {
+                printf("-D requires an argument!\n\n");
+                print_help(argv[0]);
+                exit(EXIT_FAILURE);
+            }
+
             custom_dir = argv[++i];
         }
         else if(!strcmp(argv[i], "--nodaemon")) {
             dont_daemonize = 1;
+        }
+        else if(!strcmp(argv[i], "-P")) {
+            if(i == argc - 1) {
+                printf("-P requires an argument!\n\n");
+                print_help(argv[0]);
+                exit(EXIT_FAILURE);
+            }
+
+            pidfile_name = argv[++i];
+        }
+        else if(!strcmp(argv[i], "-U")) {
+            if(i == argc - 1) {
+                printf("-U requires an argument!\n\n");
+                print_help(argv[0]);
+                exit(EXIT_FAILURE);
+            }
+
+            runas_user = argv[++i];
         }
         else if(!strcmp(argv[i], "--help")) {
             print_help(argv[0]);
@@ -409,6 +470,7 @@ static void run_server(int dcsocks[NUM_DCSOCKS], int pcsocks[NUM_PCSOCKS],
         /* If we have a shutdown scheduled and nobody's connected, go ahead and
            do it. */
         if(!client_count && shutting_down) {
+            debug(DBG_LOG, "Got shutdown signal.\n");
             return;
         }
 
@@ -706,7 +768,7 @@ static int open_sock(int family, uint16_t port) {
     return sock;
 }
 
-static void open_log() {
+static void open_log(void) {
     FILE *dbgfp;
 
     dbgfp = fopen("logs/login_debug.log", "a");
@@ -720,6 +782,177 @@ static void open_log() {
     debug_set_file(dbgfp);
 }
 
+static void reopen_log(void) {
+    FILE *dbgfp, *ofp;
+
+    dbgfp = fopen("logs/login_debug.log", "a");
+
+    if(!dbgfp) {
+        /* Uhh... Welp, guess we'll try to continue writing to the old one,
+           then... */
+        debug(DBG_ERROR, "Cannot reopen log file\n");
+        perror("fopen");
+    }
+    else {
+        ofp = debug_set_file(dbgfp);
+        fclose(ofp);
+    }
+}
+
+static void sighup_hnd(int signum, siginfo_t *inf, void *ptr) {
+    (void)signum;
+    (void)inf;
+    (void)ptr;
+    reopen_log();
+}
+
+static void sigterm_hnd(int signum, siginfo_t *inf, void *ptr) {
+    (void)signum;
+    (void)inf;
+    (void)ptr;
+    shutting_down = 1;
+}
+
+static void sigusr1_hnd(int signum, siginfo_t *inf, void *ptr) {
+    (void)signum;
+    (void)inf;
+    (void)ptr;
+    shutting_down = 2;
+}
+
+/* Install any handlers for signals we care about */
+static void install_signal_handlers() {
+    struct sigaction sa;
+
+    memset(&sa, 0, sizeof(struct sigaction));
+    sigemptyset(&sa.sa_mask);
+
+    /* Ignore SIGPIPEs */
+    sa.sa_handler = SIG_IGN;
+
+    if(sigaction(SIGPIPE, &sa, NULL) == -1) {
+        perror("sigaction");
+        exit(EXIT_FAILURE);
+    }
+
+    /* Set up a SIGHUP handler to reopen the log file, if we do log rotation. */
+    if(!dont_daemonize) {
+        sigemptyset(&sa.sa_mask);
+        sa.sa_handler = NULL;
+        sa.sa_sigaction = &sighup_hnd;
+        sa.sa_flags = SA_SIGINFO | SA_RESTART;
+
+        if(sigaction(SIGHUP, &sa, NULL) < 0) {
+            perror("sigaction");
+            fprintf(stderr, "Can't set SIGHUP handler, log rotation may not"
+                    "work.\n");
+        }
+    }
+
+    /* Set up a SIGTERM handler to somewhat gracefully shutdown. */
+    sigemptyset(&sa.sa_mask);
+    sa.sa_handler = NULL;
+    sa.sa_sigaction = &sigterm_hnd;
+    sa.sa_flags = SA_SIGINFO | SA_RESTART;
+
+    if(sigaction(SIGTERM, &sa, NULL) < 0) {
+        perror("sigaction");
+        fprintf(stderr, "Can't set SIGTERM handler.\n");
+    }
+
+    /* Set up a SIGUSR1 handler to restart... */
+    sigemptyset(&sa.sa_mask);
+    sa.sa_handler = NULL;
+    sa.sa_sigaction = &sigusr1_hnd;
+    sa.sa_flags = SA_SIGINFO | SA_RESTART;
+
+    if(sigaction(SIGUSR1, &sa, NULL) < 0) {
+        perror("sigaction");
+        fprintf(stderr, "Can't set SIGUSR1 handler.\n");
+    }
+}
+
+void cleanup_pidfile(void) {
+    pidfile_remove(pf);
+}
+
+static int drop_privs(void) {
+    struct passwd *pw;
+    uid_t uid;
+    gid_t gid;
+    int gid_count = 0;
+    gid_t *groups;
+
+    /* Make sure we're actually root, otherwise some of this will fail. */
+    if(getuid() && geteuid())
+        return 0;
+
+    /* Look for users. We're looking for the user "sylverant", generally. */
+    if((pw = getpwnam(runas_user))) {
+        uid = pw->pw_uid;
+        gid = pw->pw_gid;
+    }
+    else {
+        debug(DBG_ERROR, "Cannot find user \"%s\". Bailing out!\n", runas_user);
+        return -1;
+    }
+
+    /* Change the pidfile's uid/gid now, before we drop privileges... */
+    if(pf) {
+        if(fchown(pidfile_fileno(pf), uid, gid)) {
+            debug(DBG_WARN, "Cannot change pidfile owner: %s\n",
+                  strerror(errno));
+        }
+    }
+
+#ifdef HAVE_GETGROUPLIST
+    /* Figure out what other groups the user is in... */
+    getgrouplist(runas_user, gid, NULL, &gid_count);
+    if(!(groups = malloc(gid_count * sizeof(gid_t)))) {
+        perror("malloc");
+        return -1;
+    }
+
+    if(getgrouplist(runas_user, gid, groups, &gid_count)) {
+        perror("getgrouplist");
+        free(groups);
+        return -1;
+    }
+
+    if(setgroups(gid_count, groups)) {
+        perror("setgroups");
+        free(groups);
+        return -1;
+    }
+
+    /* We're done with most of these, so clear this out now... */
+    free(groups);
+#else
+    if(setgroups(1, &gid)) {
+        perror("setgroups");
+        return -1;
+    }
+#endif
+
+    if(setgid(gid)) {
+        perror("setgid");
+        return -1;
+    }
+
+    if(setuid(uid)) {
+        perror("setuid");
+        return -1;
+    }
+
+    /* Make sure the privileges stick. */
+    if(!getuid() || !geteuid()) {
+        debug(DBG_ERROR, "Cannot set non-root privileges. Bailing out!\n");
+        return -1;
+    }
+
+    return 0;
+}
+
 int main(int argc, char *argv[]) {
     int i, j;
     int dcsocks[NUM_DCSOCKS];
@@ -730,6 +963,7 @@ int main(int argc, char *argv[]) {
     int websocks[NUM_WEBSOCKS];
     char *initial_path;
     long size;
+    pid_t op;
 
     parse_command_line(argc, argv);
 
@@ -750,21 +984,55 @@ int main(int argc, char *argv[]) {
     else
         chdir(custom_dir);
 
-    /* If we're supposed to daemonize, do it now. */
     if(!dont_daemonize) {
-        open_log();
+        /* Attempt to open and lock the pid file. */
+        if(!pidfile_name) {
+            char *pn = (char *)malloc(strlen(PID_DIR) + 32);
+            sprintf(pn, "%s/login_server.pid", PID_DIR);
+            pidfile_name = pn;
+        }
+
+        pf = pidfile_open(pidfile_name, 0660, &op);
+
+        if(!pf) {
+            if(errno == EEXIST) {
+                debug(DBG_ERROR, "Login Server already running? (pid: %ld)\n",
+                      (long)op);
+                exit(EXIT_FAILURE);
+            }
+
+            debug(DBG_WARN, "Cannot create pidfile: %s!\n", strerror(errno));
+        }
+        else {
+            atexit(&cleanup_pidfile);
+        }
 
         if(daemon(1, 0)) {
             debug(DBG_ERROR, "Cannot daemonize\n");
             perror("daemon");
             exit(EXIT_FAILURE);
         }
+
+        if(drop_privs())
+            exit(EXIT_FAILURE);
+
+        open_log();
+
+        /* Write the pid file. */
+        pidfile_write(pf);
+    }
+    else {
+        if(drop_privs())
+            exit(EXIT_FAILURE);
     }
 
+restart:
     load_config2();
 
     /* Init mini18n if we have it. */
     init_i18n();
+
+    install_signal_handlers();
 
     debug(DBG_LOG, "Opening Dreamcast ports for connections.\n");
 
@@ -873,14 +1141,8 @@ int main(int argc, char *argv[]) {
 
     /* Restart if we're supposed to be doing so. */
     if(shutting_down == 2) {
-        chdir(initial_path);
-        free(initial_path);
-        execvp(argv[0], argv);
-
-        /* This should never be reached, since execvp should replace us. If we
-           get here, there was a serious problem... */
-        debug(DBG_ERROR, "Restart failed: %s\n", strerror(errno));
-        return -1;
+        load_config();
+        goto restart;
     }
 
     free(initial_path);

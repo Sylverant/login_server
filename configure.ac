@@ -54,7 +54,7 @@ AM_ICONV
 AM_CONDITIONAL([NEED_PIDFILE], [test "$NEED_PIDFILE" -eq 1])
 
 # Checks for header files.
-AC_CHECK_HEADERS([arpa/inet.h inttypes.h netdb.h netinet/in.h stdlib.h string.h sys/socket.h sys/time.h unistd.h])
+AC_CHECK_HEADERS([arpa/inet.h inttypes.h netdb.h netinet/in.h stdlib.h string.h sys/socket.h sys/time.h unistd.h pwd.h grp.h signal.h])
 AC_CHECK_HEADERS([libutil.h bsd/libutil.h])
 
 # Checks for typedefs, structures, and compiler characteristics.

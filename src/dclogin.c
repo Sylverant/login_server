@@ -20,6 +20,7 @@
 #include <string.h>
 #include <time.h>
 #include <ctype.h>
+#include <signal.h>
 #include <arpa/inet.h>
 #include <sys/socket.h>
 
@@ -40,7 +41,7 @@ mini18n_t langs[CLIENT_LANG_COUNT];
 extern sylverant_dbconn_t conn;
 extern sylverant_quest_list_t qlist[CLIENT_TYPE_COUNT][CLIENT_LANG_COUNT];
 extern sylverant_limits_t *limits;
-extern int shutting_down;
+extern volatile sig_atomic_t shutting_down;
 
 void print_packet(unsigned char *pkt, int len) {
     unsigned char *pos = pkt, *row = pkt;
