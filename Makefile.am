@@ -25,7 +25,7 @@ login_server_SOURCES = src/dclogin.c src/login.c src/login.h \
                        src/login_server.c src/bblogin.c src/bbcharacter.c
 
 if NEED_PIDFILE
-AM_CFLAGS += -DNEED_PIDFILE=1
+AM_CFLAGS = -DNEED_PIDFILE=1
 login_server_SOURCES += src/pidfile.c
 endif
 
