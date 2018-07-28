@@ -1,6 +1,6 @@
 /*
-    Sylverant Ship Server
-    Copyright (C) 2009, 2010, 2011, 2012, 2013, 2014, 2015 Lawrence Sebald
+    Sylverant Login Server
+    Copyright (C) 2009, 2010, 2011, 2012, 2013, 2014, 2015, 2018 Lawrence Sebald
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License version 3
@@ -1487,6 +1487,40 @@ typedef struct gc_quest_stats {
     uint32_t stats[10];
 } PACKED gc_quest_stats_pkt;
 
+/* Patch packet (thanks KuromoriYu for a lot of this information!) */
+typedef struct patch_send {
+    union {
+        dc_pkt_hdr_t dc;
+        pc_pkt_hdr_t pc;
+    } hdr;
+    uint32_t entry_offset;  /* Pointer to offset_start in footer */
+    uint32_t crc_start;
+    uint32_t crc_length;
+    uint32_t code_begin;    /* Pointer to the code, should usually be 4 */
+    uint8_t code[];         /* Append the footer below after the code */
+} PACKED patch_send_pkt;
+
+/* Footer tacked onto the end of the patch packet. */
+typedef struct patch_send_footer {
+    uint32_t offset_count;  /* Pointer to the below, relative to pkt start */
+    uint32_t num_ptrs;      /* Number of pointers to relocate (at least 1) */
+    uint32_t unk1;          /* 0 (padding?) */
+    uint32_t unk2;          /* 0 (padding?) */
+    uint32_t offset_start;  /* Set to 0 */
+    uint16_t offset_entry;  /* Set to 0 */
+    uint16_t offsets[];     /* Offsets to pointers to relocate within code */
+} PACKED patch_send_footer;
+
+/* Patch return packet. */
+typedef struct patch_return {
+    union {
+        dc_pkt_hdr_t dc;
+        pc_pkt_hdr_t pc;
+    } hdr;
+    uint32_t retval;
+    uint32_t unk;
+} PACKED patch_return_pkt;
+
 #undef PACKED
 
 /* Parameters for the various packets. */
@@ -1560,6 +1594,8 @@ typedef struct gc_quest_stats {
 #define QUEST_LOAD_DONE_TYPE            0x00AC
 #define TEXT_MSG_TYPE                   0x00B0
 #define TIMESTAMP_TYPE                  0x00B1
+#define PATCH_TYPE                      0x00B2
+#define PATCH_RETURN_TYPE               0x00B3
 #define EP3_RANK_UPDATE_TYPE            0x00B7
 #define EP3_CARD_UPDATE_TYPE            0x00B8
 #define EP3_COMMAND_TYPE                0x00BA
@@ -1659,6 +1695,8 @@ typedef struct gc_quest_stats {
 #define BB_SIMPLE_MAIL_LENGTH           0x045C
 #define BB_OPTION_CONFIG_LENGTH         0x0AF8
 #define BB_FULL_CHARACTER_LENGTH        0x399C
+#define DC_PATCH_HEADER_LENGTH          0x0014
+#define DC_PATCH_FOOTER_LENGTH          0x0018
 
 /* Responses to login packets... */
 /* DC Network Trial Edition - Responses to Packet 0x88. */

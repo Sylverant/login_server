@@ -22,7 +22,8 @@ LIBS += $(MYSQL_LIBS) $(LIBICONV)
 bin_PROGRAMS = login_server
 login_server_SOURCES = src/dclogin.c src/login.c src/login.h \
                        src/login_packets.c src/login_packets.h \
-                       src/login_server.c src/bblogin.c src/bbcharacter.c
+                       src/login_server.c src/bblogin.c src/bbcharacter.c \
+                       src/patch.h src/patch.c src/patch_stubs.h
 
 if NEED_PIDFILE
 AM_CFLAGS = -DNEED_PIDFILE=1
@@ -31,5 +32,6 @@ endif
 
 datarootdir = @datarootdir@
 
-EXTRA_DIST = config.rpath
+EXTRA_DIST = config.rpath patch/dreamcast/patch_stub.s \
+             patch/dreamcast/version_detect.s
 SUBDIRS = l10n

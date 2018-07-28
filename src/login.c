@@ -1,6 +1,6 @@
 /*
     Sylverant Login Server
-    Copyright (C) 2009, 2010, 2011, 2012, 2013 Lawrence Sebald
+    Copyright (C) 2009, 2010, 2011, 2012, 2013, 2018 Lawrence Sebald
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License version 3
@@ -34,7 +34,7 @@ struct client_queue clients = TAILQ_HEAD_INITIALIZER(clients);
 
 /* Create a new connection, storing it in the list of clients. */
 login_client_t *create_connection(int sock, int type, struct sockaddr *ip,
-                                  socklen_t size) {
+                                  socklen_t size, uint16_t port) {
     login_client_t *rv = (login_client_t *)malloc(sizeof(login_client_t));
     uint32_t client_seed_dc, server_seed_dc;
     uint8_t client_seed_bb[48], server_seed_bb[48];
@@ -50,6 +50,7 @@ login_client_t *create_connection(int sock, int type, struct sockaddr *ip,
     /* Store basic parameters in the client structure. */
     rv->sock = sock;
     rv->type = type;
+    rv->port = port;
     memcpy(&rv->ip_addr, ip, size);
 
     /* Is the user on IPv6? */

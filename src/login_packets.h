@@ -1,6 +1,6 @@
 /*
     Sylverant Login Server
-    Copyright (C) 2009, 2010, 2011, 2015 Lawrence Sebald
+    Copyright (C) 2009, 2010, 2011, 2015, 2018 Lawrence Sebald
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License version 3
@@ -32,6 +32,7 @@
 #define MENU_ID_SHIP            0x00000001
 #define MENU_ID_QUEST           0x00000004
 #define MENU_ID_GM              0x00000007
+#define MENU_ID_PATCH           0x00000002
 #define MENU_ID_INFODESK        0x000000FF
 #define MENU_ID_DATABASE        0x00040000
 
@@ -39,10 +40,13 @@
 #define ITEM_ID_INIT_DOWNLOAD   0x00000001
 #define ITEM_ID_INIT_INFO       0x00000002
 #define ITEM_ID_INIT_GM         0x00000003
+#define ITEM_ID_INIT_PATCH      0x00000004
 
 #define ITEM_ID_GM_REFRESH_Q    0x00000000
 #define ITEM_ID_GM_RESTART      0x00000001
 #define ITEM_ID_GM_SHUTDOWN     0x00000002
+
+#define ITEM_ID_PATCH_RETURN    0xFFFFFFFF
 
 /* This must be placed into the copyright field in the BB welcome packet. */
 const static char login_bb_welcome_copyright[] =
@@ -154,5 +158,14 @@ int send_motd(login_client_t *c);
 
 /* Send the long description of a quest to the given client. */
 int send_quest_description(login_client_t *c, sylverant_quest_t *q);
+
+/* Detect what version of PSOv2 the client is on. */
+int send_dc_version_detect(login_client_t *c);
+
+/* Send a single patch to a client on DC. */
+int send_single_patch_dc(login_client_t *c, const patchset_t *p);
+
+/* Send the menu of all available patches to the client. */
+int send_patch_menu(login_client_t *c);
 
 #endif /* !LOGIN_PACKETS_H */

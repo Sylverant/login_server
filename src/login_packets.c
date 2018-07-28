@@ -1,6 +1,6 @@
 /*
     Sylverant Login Server
-    Copyright (C) 2009, 2010, 2011, 2012, 2013, 2015 Lawrence Sebald
+    Copyright (C) 2009, 2010, 2011, 2012, 2013, 2015, 2018 Lawrence Sebald
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License version 3
@@ -32,6 +32,7 @@
 #include <sylverant/quest.h>
 
 #include "login_packets.h"
+#include "patch_stubs.h"
 
 extern sylverant_dbconn_t conn;
 extern sylverant_config_t *cfg;
@@ -578,10 +579,10 @@ int send_timestamp(login_client_t *c) {
    "Download". */
 static int send_initial_menu_dc(login_client_t *c) {
     dc_ship_list_pkt *pkt = (dc_ship_list_pkt *)sendbuf;
-    int len = 0x58, count = 2;
+    int len = 0x74, count = 3;
 
     /* Clear the base packet */
-    memset(pkt, 0, 0x0074);
+    memset(pkt, 0, 0x0090);
 
     /* Fill in the "DATABASE/US" entry */
     pkt->entries[0].menu_id = LE32(MENU_ID_DATABASE);
@@ -602,12 +603,18 @@ static int send_initial_menu_dc(login_client_t *c) {
     pkt->entries[2].flags = LE16(0x0F04);
     strcpy(pkt->entries[2].name, "Download Quest");
 
+    /* Fill in the runtime patching entry */
+    pkt->entries[3].menu_id = LE32(MENU_ID_INITIAL);
+    pkt->entries[3].item_id = LE32(ITEM_ID_INIT_PATCH);
+    pkt->entries[3].flags = LE16(0x0004);
+    strcpy(pkt->entries[3].name, "Patches");
+
     /* If the user is a GM, give them a bit more... */
     if(IS_GLOBAL_GM(c)) {
-        pkt->entries[3].menu_id = LE32(MENU_ID_INITIAL);
-        pkt->entries[3].item_id = LE32(ITEM_ID_INIT_GM);
-        pkt->entries[3].flags = LE16(0x0004);
-        strcpy(pkt->entries[3].name, "GM Operations");
+        pkt->entries[4].menu_id = LE32(MENU_ID_INITIAL);
+        pkt->entries[4].item_id = LE32(ITEM_ID_INIT_GM);
+        pkt->entries[4].flags = LE16(0x0004);
+        strcpy(pkt->entries[4].name, "GM Operations");
         ++count;
         len += 0x1C;
     }
@@ -2394,4 +2401,152 @@ int send_quest_description(login_client_t *c, sylverant_quest_t *q) {
 
     /* Send the packet away */
     return crypt_send(c, size);
+}
+
+int send_dc_version_detect(login_client_t *c) {
+    patch_send_pkt *pkt = (patch_send_pkt *)sendbuf;
+    uint16_t size;
+    patch_send_footer *ftr;
+
+    size = DC_PATCH_HEADER_LENGTH + DC_PATCH_FOOTER_LENGTH +
+        patch_ver_detect_dc_length;
+    ftr = (patch_send_footer *)(sendbuf + DC_PATCH_HEADER_LENGTH +
+                                patch_ver_detect_dc_length);
+
+
+    /* Fill in the information before the patch data. */
+    pkt->entry_offset = LE32(size - 0x08);
+    pkt->crc_start = LE32(0x00000000);
+    pkt->crc_length = LE32(0x00000000);
+    pkt->code_begin = LE32(4);
+    memcpy(pkt->code, patch_ver_detect_dc, patch_ver_detect_dc_length);
+
+    /* Fill in the footer... */
+    ftr->offset_count = LE32(size - 0x14);
+    ftr->num_ptrs = 1;
+    ftr->unk1 = ftr->unk2 = 0;
+    ftr->offset_start = 0;
+    ftr->offset_entry = 0;
+    ftr->offsets[0] = 0;                /* Padding... Not actually used. */
+
+    /* Fill in the header. */
+    pkt->hdr.dc.pkt_type = PATCH_TYPE;
+    pkt->hdr.dc.flags = 0xff;
+    pkt->hdr.dc.pkt_len = LE16(size);
+
+    /* Send the packet away */
+    return crypt_send(c, size);
+}
+
+int send_single_patch_dc(login_client_t *c, const patchset_t *p) {
+    patch_send_pkt *pkt = (patch_send_pkt *)sendbuf;
+    uint16_t size;
+    uint16_t code_len = patch_stub_dc_len;
+    patch_send_footer *ftr;
+    patch_file_t *pf;
+    char fn[256];                       /* XXXX */
+
+    /* Read the specified patch */
+    sprintf(fn, "%s/v2/%s", cfg->patch_dir, p->filename);
+    pf = patch_file_read(fn);
+
+    if(!pf) {
+        /* Uh oh... */
+        return -1;
+    }
+
+    /* Fill in the information before the patch data. */
+    pkt->crc_start = LE32(0x00000000);
+    pkt->crc_length = LE32(0x00000000);
+    pkt->code_begin = LE32(4);
+    memcpy(pkt->code, patch_stub_dc, patch_stub_dc_len);
+    pkt->code[patch_stub_dc_len] = (uint8_t)pf->patch_count;
+    pkt->code[patch_stub_dc_len + 1] = (uint8_t)(pf->patch_count >> 8);
+    pkt->code[patch_stub_dc_len + 2] = (uint8_t)(pf->patch_count >> 16);
+    pkt->code[patch_stub_dc_len + 3] = (uint8_t)(pf->patch_count >> 24);
+    memcpy(pkt->code + patch_stub_dc_len + 4, pf->data, pf->length);
+    code_len += 4 + pf->length;
+
+    patch_file_free(pf);
+
+    /* Fill in the rest... */
+    size = DC_PATCH_HEADER_LENGTH + DC_PATCH_FOOTER_LENGTH + code_len;
+    pkt->entry_offset = LE32(size - 0x08);
+
+    /* Fill in the footer... */
+    ftr = (patch_send_footer *)(sendbuf + DC_PATCH_HEADER_LENGTH +
+                                code_len);
+    ftr->offset_count = LE32(size - 0x14);
+    ftr->num_ptrs = 1;
+    ftr->unk1 = ftr->unk2 = 0;
+    ftr->offset_start = 0;
+    ftr->offset_entry = 0;
+    ftr->offsets[0] = 0;                /* Padding... Not actually used. */
+
+    /* Fill in the header. */
+    pkt->hdr.dc.pkt_type = PATCH_TYPE;
+    pkt->hdr.dc.flags = 0;
+    pkt->hdr.dc.pkt_len = LE16(size);
+
+    /* Send the packet away */
+    return crypt_send(c, size);
+}
+
+static int send_patch_menu_dc(login_client_t *c) {
+    dc_ship_list_pkt *pkt = (dc_ship_list_pkt *)sendbuf;
+    int len = 0x04, count = 0;
+    uint32_t i, j;
+    patch_t *p;
+
+    /* Fill in the "DATABASE/US" entry */
+    pkt->entries[count].menu_id = LE32(MENU_ID_DATABASE);
+    pkt->entries[count].item_id = 0;
+    pkt->entries[count].flags = LE16(0x0004);
+    strncpy(pkt->entries[count].name, "DATABASE/US", 0x12);
+    pkt->entries[count].name[0x11] = 0x08;
+    ++count;
+    len += 0x1C;
+
+    /* Add our entries... */
+    pkt->entries[count].menu_id = LE32(MENU_ID_PATCH);
+    pkt->entries[count].item_id = LE32(ITEM_ID_PATCH_RETURN);
+    pkt->entries[count].flags = LE16(0x0004);
+    strncpy(pkt->entries[count].name, "Main Menu", 0x12);
+    ++count;
+    len += 0x1C;
+
+    for(i = 0; i < patches_v2->patch_count; ++i) {
+        p = patches_v2->patches[i];
+
+        for(j = 0; j < p->patchset_count; ++j) {
+            if(p->patches[j]->version == c->det_version) {
+                pkt->entries[count].menu_id = LE32(MENU_ID_PATCH);
+                pkt->entries[count].item_id = LE32(p->id);
+                pkt->entries[count].flags = LE16(0x0004);
+                strncpy(pkt->entries[count].name, p->name[CLIENT_LANG_ENGLISH],
+                        0x12);
+                ++count;
+                len += 0x1C;
+            }
+        }
+    }
+
+    /* Fill in some basic stuff */
+    pkt->hdr.pkt_type = BLOCK_LIST_TYPE;
+    pkt->hdr.flags = (uint8_t)(count - 1);
+    pkt->hdr.pkt_len = LE16(len);
+
+    /* Send the packet away */
+    return crypt_send(c, len);
+}
+
+int send_patch_menu(login_client_t *c) {
+    switch(c->type) {
+        case CLIENT_TYPE_DC:
+            if(c->ext_version)
+                return send_patch_menu_dc(c);
+            return -1;
+    }
+
+    return -1;
 }

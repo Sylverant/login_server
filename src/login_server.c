@@ -58,6 +58,7 @@ int pidfile_fileno(struct pidfh *pfh);
 
 #include "login.h"
 #include "login_packets.h"
+#include "patch.h"
 
 #ifndef PID_DIR
 #define PID_DIR "/var/run"
@@ -143,6 +144,7 @@ static const int bbports[NUM_BBSOCKS][2] = {
 sylverant_dbconn_t conn;
 sylverant_config_t *cfg;
 sylverant_limits_t *limits = NULL;
+patch_list_t *patches_v2 = NULL;
 
 sylverant_quest_list_t qlist[CLIENT_TYPE_COUNT][CLIENT_LANG_COUNT];
 volatile sig_atomic_t shutting_down = 0;
@@ -303,6 +305,7 @@ static void load_config() {
 
 static void load_config2() {
     char *fn;
+    char *pfn;
     int i;
 
     /* Attempt to read each quests file... */
@@ -333,6 +336,30 @@ static void load_config2() {
 
     if(load_bb_char_data())
         exit(EXIT_FAILURE);
+
+    /* Read patch lists. */
+    if(cfg->patch_dir) {
+        debug(DBG_LOG, "Runtime Patches Directory: %s\n", cfg->patch_dir);
+
+        pfn = (char *)malloc(strlen(cfg->patch_dir) + 32);
+        if(!pfn) {
+            perror("malloc");
+            exit(EXIT_FAILURE);
+        }
+
+        /* Start with v2... */
+        sprintf(pfn, "%s/v2/patches.xml", cfg->patch_dir);
+
+        debug(DBG_LOG, "Reading DCv2 Patch List '%s'...\n", pfn);
+        if(patch_list_read(pfn, &patches_v2)) {
+            debug(DBG_LOG, "Couldn't read DCv2 patch list\n");
+            patches_v2 = NULL;
+        }
+        else {
+            debug(DBG_LOG, "Found %" PRIu32 " patches\n",
+                  patches_v2->patch_count);
+        }
+    }
 
     debug(DBG_LOG, "Connecting to the database...\n");
 
@@ -519,7 +546,8 @@ static void run_server(int dcsocks[NUM_DCSOCKS], int pcsocks[NUM_PCSOCKS],
                     debug(DBG_LOG, "Accepted Dreamcast connection from %s "
                           "on port %d\n", ipstr, dcports[j][1]);
 
-                    if(!create_connection(asock, CLIENT_TYPE_DC, addr_p, len)) {
+                    if(!create_connection(asock, CLIENT_TYPE_DC, addr_p, len,
+                                          dcports[j][1])) {
                         close(asock);
                     }
                     else {
@@ -540,7 +568,8 @@ static void run_server(int dcsocks[NUM_DCSOCKS], int pcsocks[NUM_PCSOCKS],
                     debug(DBG_LOG, "Accepted PC connection from %s "
                           "on port %d\n", ipstr, pcports[j][1]);
 
-                    if(!create_connection(asock, CLIENT_TYPE_PC, addr_p, len)) {
+                    if(!create_connection(asock, CLIENT_TYPE_PC, addr_p, len,
+                                          pcports[j][1])) {
                         close(asock);
                     }
                     else {
@@ -561,7 +590,8 @@ static void run_server(int dcsocks[NUM_DCSOCKS], int pcsocks[NUM_PCSOCKS],
                     debug(DBG_LOG, "Accepted Gamecube connection from %s "
                           "on port %d\n", ipstr, gcports[j][1]);
 
-                    if(!create_connection(asock, CLIENT_TYPE_GC, addr_p, len)) {
+                    if(!create_connection(asock, CLIENT_TYPE_GC, addr_p, len,
+                                          gcports[j][1])) {
                         close(asock);
                     }
                     else {
@@ -583,7 +613,7 @@ static void run_server(int dcsocks[NUM_DCSOCKS], int pcsocks[NUM_PCSOCKS],
                           "on port %d\n", ipstr, ep3ports[j][1]);
 
                     if(!create_connection(asock, CLIENT_TYPE_EP3, addr_p,
-                                          len)) {
+                                          len, ep3ports[j][1])) {
                         close(asock);
                     }
                     else {
@@ -611,7 +641,8 @@ static void run_server(int dcsocks[NUM_DCSOCKS], int pcsocks[NUM_PCSOCKS],
                         type = CLIENT_TYPE_BB_LOGIN;
                     }
 
-                    if(!create_connection(asock, type, addr_p, len)) {
+                    if(!create_connection(asock, type, addr_p, len,
+                                          bbports[j][1])) {
                         close(asock);
                     }
                     else {
@@ -1136,6 +1167,9 @@ restart:
             sylverant_quests_destroy(&qlist[i][j]);
         }
     }
+
+    patch_list_free(patches_v2);
+    patches_v2 = NULL;
 
     sylverant_free_config(cfg);
 	cleanup_i18n();

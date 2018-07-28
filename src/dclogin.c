@@ -274,6 +274,7 @@ static int handle_ntelogin(login_client_t *c, dcnte_login_88_pkt *pkt) {
     }
 
     c->type = CLIENT_TYPE_DCNTE;
+    c->ext_version = CLIENT_EXTVER_DC | CLIENT_EXTVER_DCNTE;
 
     /* We should check to see if the client exists here, and get it to send us
        an 0x8a if it doesn't. Otherwise, we should have it send an 0x8b. */
@@ -519,6 +520,7 @@ static int handle_login0(login_client_t *c, dc_login_90_pkt *pkt) {
     sylverant_db_result_free(result);
 
     c->version = SYLVERANT_QUEST_V1;
+    c->ext_version = CLIENT_EXTVER_DC | CLIENT_EXTVER_DCV1;
 
     return send_simple(c, LOGIN_90_TYPE, resp);
 }
@@ -662,10 +664,12 @@ static int handle_logina(login_client_t *c, dcv2_login_9a_pkt *pkt) {
         sprintf(query, "SELECT guildcard FROM dreamcast_clients WHERE "
                 "(dc_id='%s' OR dc_id IS NULL) AND serial_number='%s' AND "
                 "access_key='%s'", dc_id, serial, access);
+        c->ext_version = CLIENT_EXTVER_DC | CLIENT_EXTVER_DCV2;
     }
     else {
         sprintf(query, "SELECT guildcard FROM pc_clients WHERE "
                 "serial_number='%s' AND access_key='%s'", serial, access);
+        c->ext_version = CLIENT_EXTVER_PC;
     }
 
     /* If we can't query the database, fail. */
@@ -769,30 +773,77 @@ static int handle_gchlcheck(login_client_t *c, gc_hlcheck_pkt *pkt) {
     time_t banlen;
     int banned = is_ip_banned(c, &banlen, query);
 
+    c->ext_version = CLIENT_EXTVER_GC;
+
     /* Check the version code of the connecting client since some clients seem
        to want to connect on wonky ports... */
     switch(pkt->version) {
         case 0x30: /* Episode 1 & 2 (Japanese) */
+            c->type = CLIENT_TYPE_GC;
+            c->ext_version |= CLIENT_EXTVER_GC_EP12 | CLIENT_EXTVER_GC_REG_JP;
+            break;
+
         case 0x31: /* Episode 1 & 2 (US 1.0/1.01) */
+            c->type = CLIENT_TYPE_GC;
+            c->ext_version |= CLIENT_EXTVER_GC_EP12 | CLIENT_EXTVER_GC_REG_US;
+            break;
+
         case 0x32: /* Episode 1 & 2 (Europe, 50hz) */
+            c->type = CLIENT_TYPE_GC;
+            c->ext_version |= CLIENT_EXTVER_GC_EP12 |
+                CLIENT_EXTVER_GC_REG_PAL50;
+            break;
+
         case 0x33: /* Episode 1 & 2 (Europe, 60hz) */
+            c->type = CLIENT_TYPE_GC;
+            c->ext_version |= CLIENT_EXTVER_GC_EP12 |
+                CLIENT_EXTVER_GC_REG_PAL60;
+            break;
+
         case 0x34: /* Episode 1 & 2 (Japan, v1.03) */
+            c->type = CLIENT_TYPE_GC;
+            c->ext_version |= CLIENT_EXTVER_GC_EP12 | CLIENT_EXTVER_GC_REG_JP;
+            break;
+
         case 0x36: /* Episode 1 & 2 Plus (US) */
+            c->type = CLIENT_TYPE_GC;
+            c->ext_version |= CLIENT_EXTVER_GC_EP12PLUS |
+                CLIENT_EXTVER_GC_REG_US;
+            break;
+
         case 0x39: /* Episode 1 & 2 Plus (Japan) */
             c->type = CLIENT_TYPE_GC;
+            c->ext_version |= CLIENT_EXTVER_GC_EP12PLUS |
+                CLIENT_EXTVER_GC_REG_JP;
             break;
 
         case 0x40: /* Episode 3 (trial?) */
+            c->type = CLIENT_TYPE_EP3;
+            c->ext_version |= CLIENT_EXTVER_GC_EP3 | CLIENT_EXTVER_GC_REG_JP;
+            break;
+
         case 0x41: /* Episode 3 (US) */
+            c->type = CLIENT_TYPE_EP3;
+            c->ext_version |= CLIENT_EXTVER_GC_EP3 | CLIENT_EXTVER_GC_REG_US;
+            break;
+
         case 0x42: /* Episode 3 (Japanese) */
+            c->type = CLIENT_TYPE_EP3;
+            c->ext_version |= CLIENT_EXTVER_GC_EP3 | CLIENT_EXTVER_GC_REG_JP;
+            break;
+
         case 0x43: /* Episode 3 (Europe) */
             c->type = CLIENT_TYPE_EP3;
+            c->ext_version |= CLIENT_EXTVER_GC_EP3 | CLIENT_EXTVER_GC_REG_PAL60;
             break;
 
         default:
             debug(DBG_LOG, "Unknown version code: %02x\n", pkt->version);
             c->type = CLIENT_TYPE_GC;
     }
+
+    /* Save the raw version code in the extended version field too... */
+    c->ext_version |= (pkt->version << 8);
 
     /* Make sure the user isn't IP banned. */
     if(banned == -1) {
@@ -1009,6 +1060,10 @@ static int handle_logind(login_client_t *c, dcv2_login_9d_pkt *pkt) {
        code... All the real checking has been done elsewhere. */
     c->language_code = pkt->language_code;
 
+    /* XXXX: Probably move this elsewhere... */
+    if(c->type == CLIENT_TYPE_DC)
+        send_dc_version_detect(c);
+
     return send_dc_security(c, c->guildcard, NULL, 0);
 }
 
@@ -1040,6 +1095,9 @@ static int handle_ship_select(login_client_t *c, dc_select_pkt *pkt) {
             }
             else if(item_id == ITEM_ID_INIT_GM) {
                 return send_gm_menu(c);
+            }
+            else if(item_id == ITEM_ID_INIT_PATCH) {
+                return send_patch_menu(c);
             }
 
             return -1;
@@ -1127,6 +1185,24 @@ static int handle_ship_select(login_client_t *c, dc_select_pkt *pkt) {
                     return -1;
             }
 
+        case MENU_ID_PATCH:
+            if(item_id == ITEM_ID_PATCH_RETURN) {
+                return send_initial_menu(c);
+            }
+            else {
+                const patchset_t *p;
+
+                p = patch_find(patches_v2, c->det_version, item_id);
+                if(p) {
+                    send_single_patch_dc(c, p);
+                }
+                else {
+                    return -1;
+                }
+
+                return send_patch_menu(c);
+            }
+
         default:
             return -1;
     }
@@ -1184,6 +1260,7 @@ static int handle_info_req(login_client_t *c, dc_select_pkt *pkt) {
     char str[256];
     void *result;
     char **row;
+    const char *desc;
 
     /* Don't go out of bounds... */
     if(c->type < CLIENT_TYPE_DCNTE)
@@ -1248,10 +1325,37 @@ static int handle_info_req(login_client_t *c, dc_select_pkt *pkt) {
             else
                 return -1;
 
+        /* Patches */
+        case MENU_ID_PATCH:
+            if(item_id == ITEM_ID_PATCH_RETURN)
+                return 0;
+
+            if(c->type == CLIENT_TYPE_DC)
+                desc = patch_get_desc(patches_v2, item_id, c->language_code);
+            else
+                return 0;
+
+            return send_info_reply(c, desc);
+
         default:
             /* Ignore any other info requests. */
             return 0;
     }
+}
+
+/* Process a patch return packet, mainly looking for what version the client is
+   running. */
+int handle_patch_return(login_client_t *c, patch_return_pkt *pkt) {
+    uint32_t ver;
+
+    /* See if it's one corresponding to our version check... */
+    if(pkt->hdr.dc.flags != 0xff)
+        return 0;
+
+    ver = LE32(pkt->retval);
+    c->det_version = ver;
+
+    return 0;
 }
 
 /* Process one login packet. */
@@ -1397,6 +1501,10 @@ int process_dclogin_packet(login_client_t *c, void *pkt) {
         case DL_QUEST_CHUNK_TYPE:
             /* XXXX: Nothing useful to do with these by the time we get them. */
             return 0;
+
+        case PATCH_RETURN_TYPE:
+            /* XXXX: Hopefully nobody crashes, right? */
+            return handle_patch_return(c, (patch_return_pkt *)pkt);
 
         default:
             print_packet((unsigned char *)pkt, len);

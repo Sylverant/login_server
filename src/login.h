@@ -1,6 +1,6 @@
 /*
     Sylverant Login Server
-    Copyright (C) 2009, 2010, 2011, 2012, 2013 Lawrence Sebald
+    Copyright (C) 2009, 2010, 2011, 2012, 2013, 2018 Lawrence Sebald
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License version 3
@@ -26,6 +26,7 @@
 #include <sylverant/database.h>
 
 #include "player.h"
+#include "patch.h"
 
 /* Determine if a client is in our LAN */
 #define IN_NET(c, s, n) ((c & n) == (s & n))
@@ -93,11 +94,14 @@ typedef struct login_client {
 
     int language_code;
     int is_gm;
+    uint16_t port;
+    uint32_t ext_version;
 
     uint32_t client_key;
     uint32_t server_key;
     int got_first;
     int version;
+    uint32_t det_version;
 
     CRYPT_SETUP client_cipher;
     CRYPT_SETUP server_cipher;
@@ -140,6 +144,29 @@ typedef struct login_client {
 
 #define CLIENT_TYPE_COUNT           4   /* This doesn't include the BB types */
 
+/* Extended version code bitfield values */
+#define CLIENT_EXTVER_DC            (1 << 0)
+#define CLIENT_EXTVER_PC            (1 << 1)
+#define CLIENT_EXTVER_GC            (1 << 2)
+#define CLIENT_EXTVER_BB            (1 << 3)
+
+/* Subtypes for CLIENT_EXTVER_DC */
+#define CLIENT_EXTVER_DCNTE         (1 << 4)
+#define CLIENT_EXTVER_DCV1          (2 << 4)
+#define CLIENT_EXTVER_DCV2          (3 << 4)    /* Both v1/nte bits = v2 */
+#define CLIENT_EXTVER_DC50HZ        (1 << 7)
+
+/* Subtypes for CLIENT_EXTVER_GC */
+#define CLIENT_EXTVER_GC_EP12       (1 << 4)
+#define CLIENT_EXTVER_GC_EP3        (2 << 4)
+#define CLIENT_EXTVER_GC_EP12PLUS   (3 << 4)
+#define CLIENT_EXTVER_GC_REG_MASK   (3 << 6)    /* Values below... */
+#define CLIENT_EXTVER_GC_REG_US     (0 << 6)
+#define CLIENT_EXTVER_GC_REG_JP     (1 << 6)
+#define CLIENT_EXTVER_GC_REG_PAL60  (2 << 6)
+#define CLIENT_EXTVER_GC_REG_PAL50  (3 << 6)
+#define CLIENT_EXTVER_GC_VER_MASK   (0xFF << 8)
+
 /* The list of type codes for the quest directories. */
 static const char type_codes[][3] __attribute__((unused)) = {
     "dc", "pc", "gc", "e3"
@@ -179,9 +206,10 @@ extern struct client_queue clients;
 
 extern sylverant_dbconn_t conn;
 extern sylverant_config_t *cfg;
+extern patch_list_t *patches_v2;
 
 login_client_t *create_connection(int sock, int type, struct sockaddr *ip,
-                                  socklen_t size);
+                                  socklen_t size, uint16_t port);
 void destroy_connection(login_client_t *c);
 
 int read_from_client(login_client_t *c);
