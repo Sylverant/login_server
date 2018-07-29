@@ -640,7 +640,6 @@ static int send_initial_menu_pc(login_client_t *c) {
     pkt->entries[0].item_id = 0;
     pkt->entries[0].flags = LE16(0x0004);
     memcpy(pkt->entries[0].name, "D\0A\0T\0A\0B\0A\0S\0E\0/\0U\0S\0", 22);
-    pkt->entries[0].name[0x11] = 0x08;
 
     /* Fill in the "Ship Select" entry */
     pkt->entries[1].menu_id = LE32(MENU_ID_INITIAL);
