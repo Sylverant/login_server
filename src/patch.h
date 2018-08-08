@@ -31,6 +31,8 @@ typedef struct patch {
     uint32_t conflicts_count;
     uint32_t patchset_count;
 
+    int gmonly;
+
     char **name;
     char **desc;
     uint32_t *requires;

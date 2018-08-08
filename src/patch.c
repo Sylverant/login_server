@@ -181,7 +181,7 @@ out:
 }
 
 static int handle_patch(xmlNode *n, patch_list_t *l) {
-    xmlChar *id;
+    xmlChar *id, *gmonly;
     int rv = 0;
     uint32_t rid;
     patch_t *p;
@@ -219,11 +219,14 @@ static int handle_patch(xmlNode *n, patch_list_t *l) {
     memset(p->name, 0, sizeof(char *) * CLIENT_LANG_COUNT);
     memset(p->desc, 0, sizeof(char *) * CLIENT_LANG_COUNT);
 
-    /* Grab the attribute we're expecting. */
+    /* Grab the attributes we're expecting. */
     id = xmlGetProp(n, XC"id");
+    gmonly = xmlGetProp(n, XC"gmonly");
 
-    if(!id) {
-        debug(DBG_ERROR, "patch tag missing id attribute.\n");
+    if(!id || !gmonly) {
+        debug(DBG_ERROR, "patch tag missing attribute.\n");
+        xmlFree(id);
+        xmlFree(gmonly);
         free(p->desc);
         free(p->name);
         free(p);
@@ -237,6 +240,7 @@ static int handle_patch(xmlNode *n, patch_list_t *l) {
     if(errno) {
         debug(DBG_ERROR, "Invalid ID for patch: %s\n", (const char *)id);
         xmlFree(id);
+        xmlFree(gmonly);
         free(p->desc);
         free(p->name);
         free(p);
@@ -244,8 +248,25 @@ static int handle_patch(xmlNode *n, patch_list_t *l) {
     }
 
     xmlFree(id);
-
     p->id = rid;
+
+    /* Make sure the value for gmonly is sane. */
+    if(!xmlStrcmp(gmonly, XC"true")) {
+        p->gmonly = 1;
+    }
+    else if(!xmlStrcmp(gmonly, XC"false")) {
+        p->gmonly = 0;
+    }
+    else {
+        debug(DBG_ERROR, "Invalid value for gmonly for patch\n");
+        xmlFree(gmonly);
+        free(p->desc);
+        free(p->name);
+        free(p);
+        return -17;
+    }
+
+    xmlFree(gmonly);
 
     /* Now that we're done with that, deal with any children of the node */
     n = n->children;
