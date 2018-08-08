@@ -1487,7 +1487,8 @@ typedef struct gc_quest_stats {
     uint32_t stats[10];
 } PACKED gc_quest_stats_pkt;
 
-/* Patch packet (thanks KuromoriYu for a lot of this information!) */
+/* Patch packet (thanks KuromoriYu for a lot of this information!)
+    The code_begin value is big endian on PSOGC, and little endian on PSODC */
 typedef struct patch_send {
     union {
         dc_pkt_hdr_t dc;
@@ -1500,7 +1501,8 @@ typedef struct patch_send {
     uint8_t code[];         /* Append the footer below after the code */
 } PACKED patch_send_pkt;
 
-/* Footer tacked onto the end of the patch packet. */
+/* Footer tacked onto the end of the patch packet. This is all big endian on
+   PSOGC and little endian on PSODC.*/
 typedef struct patch_send_footer {
     uint32_t offset_count;  /* Pointer to the below, relative to pkt start */
     uint32_t num_ptrs;      /* Number of pointers to relocate (at least 1) */

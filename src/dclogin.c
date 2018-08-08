@@ -1020,7 +1020,7 @@ static int handle_gcloginc(login_client_t *c, gc_login_9c_pkt *pkt) {
 }
 
 static int handle_gclogine(login_client_t *c, gc_login_9e_pkt *pkt) {
-    uint32_t gc;
+    uint32_t gc, v;
     char query[256], serial[32], access[32];
     void *result;
     char **row;
@@ -1046,6 +1046,14 @@ static int handle_gclogine(login_client_t *c, gc_login_9e_pkt *pkt) {
         gc = (uint32_t)strtoul(row[0], NULL, 0);
         sylverant_db_result_free(result);
 
+        /* Only send the version detection packet to non-plus versions of the
+           game, as the plus versions will immediately disconnect if they
+           receive a packet 0xB2. Note that this means it is probably impossible
+           to do runtime patches for PSO Episode I&II Plus. */
+        v = c->ext_version & CLIENT_EXTVER_GC_EP_MASK;
+        if(c->type == CLIENT_TYPE_GC && v != CLIENT_EXTVER_GC_EP12PLUS)
+            send_gc_version_detect(c);
+
         return send_dc_security(c, gc, NULL, 0);
     }
 
@@ -1060,7 +1068,7 @@ static int handle_logind(login_client_t *c, dcv2_login_9d_pkt *pkt) {
        code... All the real checking has been done elsewhere. */
     c->language_code = pkt->language_code;
 
-    /* XXXX: Probably move this elsewhere... */
+    /* XXXX: Probably should move this elsewhere... */
     if(c->type == CLIENT_TYPE_DC)
         send_dc_version_detect(c);
 
@@ -1073,6 +1081,7 @@ static int handle_ship_select(login_client_t *c, dc_select_pkt *pkt) {
     uint32_t menu_id = LE32(pkt->menu_id);
     uint32_t item_id = LE32(pkt->item_id);
     int rv;
+    const patchset_t *p;
 
     /* Don't go out of bounds... */
     if(c->type < CLIENT_TYPE_DCNTE)
@@ -1189,9 +1198,7 @@ static int handle_ship_select(login_client_t *c, dc_select_pkt *pkt) {
             if(item_id == ITEM_ID_PATCH_RETURN) {
                 return send_initial_menu(c);
             }
-            else {
-                const patchset_t *p;
-
+            else if(c->type == CLIENT_TYPE_DC) {
                 p = patch_find(patches_v2, c->det_version, item_id);
                 if(p) {
                     send_single_patch_dc(c, p);
@@ -1199,9 +1206,18 @@ static int handle_ship_select(login_client_t *c, dc_select_pkt *pkt) {
                 else {
                     return -1;
                 }
-
-                return send_patch_menu(c);
             }
+            else if(c->type == CLIENT_TYPE_GC) {
+                p = patch_find(patches_gc, c->det_version, item_id);
+                if(p) {
+                    send_single_patch_gc(c, p);
+                }
+                else {
+                    return -1;
+                }
+            }
+
+            return send_patch_menu(c);
 
         default:
             return -1;
@@ -1332,6 +1348,8 @@ static int handle_info_req(login_client_t *c, dc_select_pkt *pkt) {
 
             if(c->type == CLIENT_TYPE_DC)
                 desc = patch_get_desc(patches_v2, item_id, c->language_code);
+            else if(c->type == CLIENT_TYPE_GC)
+                desc = patch_get_desc(patches_gc, item_id, c->language_code);
             else
                 return 0;
 

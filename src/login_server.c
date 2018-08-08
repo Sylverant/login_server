@@ -145,6 +145,7 @@ sylverant_dbconn_t conn;
 sylverant_config_t *cfg;
 sylverant_limits_t *limits = NULL;
 patch_list_t *patches_v2 = NULL;
+patch_list_t *patches_gc = NULL;
 
 sylverant_quest_list_t qlist[CLIENT_TYPE_COUNT][CLIENT_LANG_COUNT];
 volatile sig_atomic_t shutting_down = 0;
@@ -358,6 +359,18 @@ static void load_config2() {
         else {
             debug(DBG_LOG, "Found %" PRIu32 " patches\n",
                   patches_v2->patch_count);
+        }
+
+        sprintf(pfn, "%s/gc/patches.xml", cfg->patch_dir);
+
+        debug(DBG_LOG, "Reading GC Patch list '%s'...\n", pfn);
+        if(patch_list_read(pfn, &patches_gc)) {
+            debug(DBG_LOG, "Couldn't read GC patch list\n");
+            patches_gc = NULL;
+        }
+        else {
+            debug(DBG_LOG, "Found %" PRIu32 " patches\n",
+                  patches_gc->patch_count);
         }
     }
 

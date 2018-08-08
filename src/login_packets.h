@@ -159,11 +159,13 @@ int send_motd(login_client_t *c);
 /* Send the long description of a quest to the given client. */
 int send_quest_description(login_client_t *c, sylverant_quest_t *q);
 
-/* Detect what version of PSOv2 the client is on. */
+/* Detect what version of PSO the client is on. */
 int send_dc_version_detect(login_client_t *c);
+int send_gc_version_detect(login_client_t *c);
 
-/* Send a single patch to a client on DC. */
+/* Send a single patch to a client. */
 int send_single_patch_dc(login_client_t *c, const patchset_t *p);
+int send_single_patch_gc(login_client_t *c, const patchset_t *p);
 
 /* Send the menu of all available patches to the client. */
 int send_patch_menu(login_client_t *c);

@@ -154,12 +154,14 @@ typedef struct login_client {
 #define CLIENT_EXTVER_DCNTE         (1 << 4)
 #define CLIENT_EXTVER_DCV1          (2 << 4)
 #define CLIENT_EXTVER_DCV2          (3 << 4)    /* Both v1/nte bits = v2 */
+#define CLIENT_EXTVER_DC_VER_MASK   (3 << 4)
 #define CLIENT_EXTVER_DC50HZ        (1 << 7)
 
 /* Subtypes for CLIENT_EXTVER_GC */
 #define CLIENT_EXTVER_GC_EP12       (1 << 4)
 #define CLIENT_EXTVER_GC_EP3        (2 << 4)
 #define CLIENT_EXTVER_GC_EP12PLUS   (3 << 4)
+#define CLIENT_EXTVER_GC_EP_MASK    (3 << 4)
 #define CLIENT_EXTVER_GC_REG_MASK   (3 << 6)    /* Values below... */
 #define CLIENT_EXTVER_GC_REG_US     (0 << 6)
 #define CLIENT_EXTVER_GC_REG_JP     (1 << 6)
@@ -207,6 +209,7 @@ extern struct client_queue clients;
 extern sylverant_dbconn_t conn;
 extern sylverant_config_t *cfg;
 extern patch_list_t *patches_v2;
+extern patch_list_t *patches_gc;
 
 login_client_t *create_connection(int sock, int type, struct sockaddr *ip,
                                   socklen_t size, uint16_t port);
