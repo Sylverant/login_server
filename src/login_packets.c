@@ -713,7 +713,7 @@ static int send_initial_menu_gc(login_client_t *c) {
     strcpy(pkt->entries[3].name, "Information");
 
     /* Fill in the runtime patching entry, if they're available. */
-    if(v != CLIENT_EXTVER_GC_EP12PLUS && patches_gc && IS_GLOBAL_GM(c)) {
+    if(v != CLIENT_EXTVER_GC_EP12PLUS && patches_gc) {
         pkt->entries[count + 1].menu_id = LE32(MENU_ID_INITIAL);
         pkt->entries[count + 1].item_id = LE32(ITEM_ID_INIT_PATCH);
         pkt->entries[count + 1].flags = LE16(0x0004);
