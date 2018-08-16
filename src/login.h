@@ -161,12 +161,13 @@ typedef struct login_client {
 #define CLIENT_EXTVER_GC_EP12       (1 << 4)
 #define CLIENT_EXTVER_GC_EP3        (2 << 4)
 #define CLIENT_EXTVER_GC_EP12PLUS   (3 << 4)
-#define CLIENT_EXTVER_GC_EP_MASK    (3 << 4)
 #define CLIENT_EXTVER_GC_REG_MASK   (3 << 6)    /* Values below... */
 #define CLIENT_EXTVER_GC_REG_US     (0 << 6)
 #define CLIENT_EXTVER_GC_REG_JP     (1 << 6)
 #define CLIENT_EXTVER_GC_REG_PAL60  (2 << 6)
 #define CLIENT_EXTVER_GC_REG_PAL50  (3 << 6)
+#define CLIENT_EXTVER_GC_EP_MASK    (3 << 4)
+#define CLIENT_EXTVER_GC_REG_MASK   (3 << 6)
 #define CLIENT_EXTVER_GC_VER_MASK   (0xFF << 8)
 
 /* The list of type codes for the quest directories. */

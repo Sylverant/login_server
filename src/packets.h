@@ -1520,7 +1520,7 @@ typedef struct patch_return {
         pc_pkt_hdr_t pc;
     } hdr;
     uint32_t retval;
-    uint32_t unk;
+    uint32_t crc;
 } PACKED patch_return_pkt;
 
 #undef PACKED

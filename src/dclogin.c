@@ -778,7 +778,7 @@ static int handle_gchlcheck(login_client_t *c, gc_hlcheck_pkt *pkt) {
     /* Check the version code of the connecting client since some clients seem
        to want to connect on wonky ports... */
     switch(pkt->version) {
-        case 0x30: /* Episode 1 & 2 (Japanese) */
+        case 0x30: /* Episode 1 & 2 (Japanese, v1.02) */
             c->type = CLIENT_TYPE_GC;
             c->ext_version |= CLIENT_EXTVER_GC_EP12 | CLIENT_EXTVER_GC_REG_JP;
             break;

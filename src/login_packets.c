@@ -2458,17 +2458,10 @@ int send_dc_version_detect(login_client_t *c) {
     return crypt_send(c, size);
 }
 
-int send_gc_version_detect(login_client_t *c) {
+static int send_gc_real_version_detect(login_client_t *c) {
     patch_send_pkt *pkt = (patch_send_pkt *)sendbuf;
     uint16_t size;
     patch_send_footer *ftr;
-    uint32_t v;
-
-    /* There shouldn't be any way for a Episode I & II Plus client to make it
-       here, so disconnect them if they try. */
-    v = c->ext_version & CLIENT_EXTVER_GC_EP_MASK;
-    if(v == CLIENT_EXTVER_GC_EP12PLUS)
-        return -1;
 
     size = DC_PATCH_HEADER_LENGTH + DC_PATCH_FOOTER_LENGTH +
         patch_ver_detect_gc_len;
@@ -2497,6 +2490,57 @@ int send_gc_version_detect(login_client_t *c) {
 
     /* Send the packet away */
     return crypt_send(c, size);
+}
+
+static int send_gc_patch_cache_invalidate(login_client_t *c) {
+    patch_send_pkt *pkt = (patch_send_pkt *)sendbuf;
+    uint16_t size;
+    patch_send_footer *ftr;
+
+    size = DC_PATCH_HEADER_LENGTH + DC_PATCH_FOOTER_LENGTH +
+        patch_ver_detect_gc_len;
+    ftr = (patch_send_footer *)(sendbuf + DC_PATCH_HEADER_LENGTH +
+                               patch_ver_detect_gc_len);
+
+    /* Fill in the information before the patch data. */
+    pkt->entry_offset = LE32(size - 0x08);
+    pkt->crc_start = LE32(0x00000000);
+    pkt->crc_length = LE32(0x00000000);
+    pkt->code_begin = htonl(0x8000c274);
+    memcpy(pkt->code, patch_ver_detect_gc, patch_ver_detect_gc_len);
+
+    /* Fill in the footer... */
+    ftr->offset_count = htonl(0x7f2634ec); /* Makes the flush len about 32KiB */
+    ftr->num_ptrs = htonl(0);
+    ftr->unk1 = ftr->unk2 = 0;
+    ftr->offset_start = 0;
+    ftr->offset_entry = 0;
+    ftr->offsets[0] = 0;                /* Padding... Not actually used. */
+
+    /* Fill in the header. */
+    pkt->hdr.dc.pkt_type = PATCH_TYPE;
+    pkt->hdr.dc.flags = 0xfe;
+    pkt->hdr.dc.pkt_len = LE16(size);
+
+    /* Send the packet away */
+    return crypt_send(c, size);
+}
+
+int send_gc_version_detect(login_client_t *c) {
+    uint32_t v = c->ext_version & CLIENT_EXTVER_GC_EP_MASK;
+
+    /* This shouldn't happen, but just in case. */
+    if(v == CLIENT_EXTVER_GC_EP12PLUS)
+        return -1;
+
+    /* Now, grab what we really care about here. */
+    v = (c->ext_version >> 8) & 0xFF;
+
+    /* Is the user on Japanese v1.02 or either version of the US releases? */
+    if(v == 0x30 || v == 0x31)
+        send_gc_patch_cache_invalidate(c);
+
+    return send_gc_real_version_detect(c);
 }
 
 int send_single_patch_dc(login_client_t *c, const patchset_t *p) {
@@ -2559,20 +2603,100 @@ int send_single_patch_dc(login_client_t *c, const patchset_t *p) {
     return crypt_send(c, size);
 }
 
-int send_single_patch_gc(login_client_t *c, const patchset_t *p) {
+static int send_single_patch_gc_inval(login_client_t *c, const patchset_t *p) {
+    patch_send_pkt *pkt = (patch_send_pkt *)sendbuf;
+    uint16_t size;
+    uint16_t code_len = 64;
+    patch_send_footer *ftr;
+    patch_file_t *pf;
+    char fn[256];                       /* XXXX */
+
+    /* Read the specified patch */
+    sprintf(fn, "%s/gc/%s", cfg->patch_dir, p->filename);
+    pf = patch_file_read(fn);
+
+    if(!pf) {
+        /* Uh oh... */
+        return -1;
+    }
+
+    /* We have to do this in two parts, because of Sega's stupid bug. In the
+       first part, we send a small portion of the code of the patch stub (just
+       the part that actually flushes/invalidates the cache, basically) over
+       and have some code in the game flush the cache over that. Afterwards,
+       we send the whole patch stub and patch data over, having the code that
+       we previously sent do the job. It's ugly and hackish, but it works.*/
+    pkt->crc_start = LE32(0x00000000);
+    pkt->crc_length = LE32(0x00000000);
+    pkt->code_begin = htonl(0x8000c274);
+    memcpy(pkt->code, patch_stub_gc, code_len); /* Ugly hack, but whatever. */
+
+    size = DC_PATCH_HEADER_LENGTH + DC_PATCH_FOOTER_LENGTH + code_len;
+    pkt->entry_offset = LE32(size - 0x08);
+
+    /* Fill in the footer... */
+    ftr = (patch_send_footer *)(sendbuf + DC_PATCH_HEADER_LENGTH +
+                                code_len);
+    ftr->offset_count = htonl(0x7f2634ec); /* Makes the flush len about 32KiB */
+    ftr->num_ptrs = 0;
+    ftr->unk1 = ftr->unk2 = 0;
+    ftr->offset_start = 0;
+    ftr->offset_entry = 0;
+    ftr->offsets[0] = 0;                /* Padding... Not actually used. */
+
+    /* Fill in the header. */
+    pkt->hdr.dc.pkt_type = PATCH_TYPE;
+    pkt->hdr.dc.flags = 0;
+    pkt->hdr.dc.pkt_len = LE16(size);
+
+    /* Send the packet away */
+    crypt_send(c, size);
+
+    /* Fill in the information before the patch data, for real this time. */
+    code_len = patch_stub_gc_len;
+    pkt->crc_start = LE32(0x00000000);
+    pkt->crc_length = LE32(0x00000000);
+    pkt->code_begin = htonl(4);
+    memcpy(pkt->code, patch_stub_gc, patch_stub_gc_len);
+    pkt->code[patch_stub_gc_len] = (uint8_t)(pf->patch_count >> 24);
+    pkt->code[patch_stub_gc_len + 1] = (uint8_t)(pf->patch_count >> 16);
+    pkt->code[patch_stub_gc_len + 2] = (uint8_t)(pf->patch_count >> 8);
+    pkt->code[patch_stub_gc_len + 3] = (uint8_t)pf->patch_count;
+    memcpy(pkt->code + patch_stub_gc_len + 4, pf->data, pf->length);
+    code_len += 4 + pf->length;
+
+    patch_file_free(pf);
+
+    /* Fill in the rest... */
+    size = DC_PATCH_HEADER_LENGTH + DC_PATCH_FOOTER_LENGTH + code_len;
+    pkt->entry_offset = LE32(size - 0x08);
+
+    /* Fill in the footer... */
+    ftr = (patch_send_footer *)(sendbuf + DC_PATCH_HEADER_LENGTH +
+                                code_len);
+    ftr->offset_count = htonl(size - 0x14);
+    ftr->num_ptrs = htonl(1);
+    ftr->unk1 = ftr->unk2 = 0;
+    ftr->offset_start = 0;
+    ftr->offset_entry = 0;
+    ftr->offsets[0] = 0;                /* Padding... Not actually used. */
+
+    /* Fill in the header. */
+    pkt->hdr.dc.pkt_type = PATCH_TYPE;
+    pkt->hdr.dc.flags = 0;
+    pkt->hdr.dc.pkt_len = LE16(size);
+
+    /* Send the packet away */
+    return crypt_send(c, size);
+}
+
+static int send_single_patch_gc_noinv(login_client_t *c, const patchset_t *p) {
     patch_send_pkt *pkt = (patch_send_pkt *)sendbuf;
     uint16_t size;
     uint16_t code_len = patch_stub_gc_len;
     patch_send_footer *ftr;
     patch_file_t *pf;
     char fn[256];                       /* XXXX */
-    uint32_t v;
-
-    /* There shouldn't be any way for a Episode I & II Plus client to make it
-       here, so disconnect them if they try. */
-    v = c->ext_version & CLIENT_EXTVER_GC_EP_MASK;
-    if(v == CLIENT_EXTVER_GC_EP12PLUS)
-        return -1;
 
     /* Read the specified patch */
     sprintf(fn, "%s/gc/%s", cfg->patch_dir, p->filename);
@@ -2618,6 +2742,23 @@ int send_single_patch_gc(login_client_t *c, const patchset_t *p) {
 
     /* Send the packet away */
     return crypt_send(c, size);
+}
+
+int send_single_patch_gc(login_client_t *c, const patchset_t *p) {
+    uint32_t v = c->ext_version & CLIENT_EXTVER_GC_EP_MASK;
+
+    /* This shouldn't happen, but just in case. */
+    if(v == CLIENT_EXTVER_GC_EP12PLUS)
+        return -1;
+
+    /* Now, grab what we really care about here. */
+    v = (c->ext_version >> 8) & 0xFF;
+
+    /* Is the user on Japanese v1.02 or either version of the US releases? */
+    if(v == 0x30 || v == 0x31)
+        return send_single_patch_gc_inval(c, p);
+    else
+        return send_single_patch_gc_noinv(c, p);
 }
 
 static int send_patch_menu_dcgc(login_client_t *c) {

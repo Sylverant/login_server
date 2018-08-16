@@ -15,9 +15,26 @@
 
 # This code is prepended to any patches sent to the client through packet 0xB2.
 # It is responsible for unpacking the patches and applying them.
-
+# Also, because of the fact that several versions of PSO for Gamecube do not
+# properly flush/invalidate the caches before trying to run the patch code, this
+# code will do that before doing anything else. This isn't necessary on some
+# versions of the game, but rather than maintaining different versions of this
+# code for different versions of the game, everyone gets the same code...
+# Call me lazy, but it's safer for everyone this way.
     .text
 start:
+    li          4, 0x4000               # 16KiB aught to be enough...
+    mfctr       3                       # We got here by way of a bctrl...
+    addi        3, 3, 64                # Skip the first block
+cache_loop:
+    dcbst       0, 3                    # Flush the dcache
+    sync                                # Wait for it
+    icbi        0, 3                    # Invalidate the icache
+    addi        3, 3, 32                # Move to the next block
+    addi        4, 4, -32               # Decrement how much we have to go
+    cmplwi      4, 0                    # Are we done?
+    bne         cache_loop              # If not, keep going
+    isync                               # Wait for the icache to catch up
     mflr        9                       # Curse you PowerPC for not having
     bl          before_data             # PC-relative loads...
     mflr        4                       # r4 now has data_start's address
