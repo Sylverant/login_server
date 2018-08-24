@@ -55,6 +55,7 @@ typedef struct patch_file {
     uint32_t patch_count;
     uint32_t length;
     uint8_t *data;
+    struct patch_file *next;
 } patch_file_t;
 
 patch_file_t *patch_file_read(const char *fn);

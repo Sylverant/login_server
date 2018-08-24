@@ -15,6 +15,7 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 #include <pthread.h>
@@ -621,6 +622,7 @@ patch_file_t *patch_file_read(const char *fn) {
     }
 
     memcpy(rv->data, buf + 16, rv->length);
+    rv->next = NULL;
 
     /* Done */
     return rv;
@@ -632,4 +634,156 @@ void patch_file_free(patch_file_t *f) {
 
     free(f->data);
     free(f);
+}
+
+#define U8_TO_BE32(b) ((b[0] << 24) | (b[1] << 16) | (b[2] << 8) | (b[3]))
+#define U8_TO_LE32(b) ((b[3] << 24) | (b[2] << 16) | (b[1] << 8) | (b[0]))
+
+#define U8_TO_U32(b, c) (c ? U8_TO_BE32(b) : U8_TO_LE32(b))
+
+static uint8_t *patch_add_part(uint8_t *buf, uint32_t *max_size,
+                               patch_file_t *pf, uint16_t *off, uint16_t *pc,
+                               uint32_t *np, int be) {
+    uint32_t i;
+    uint32_t cnt;
+    uint8_t *pbuf = pf->data + *off;
+    uint8_t op;
+
+    /* Oh what fun it is to parse the patch data... */
+    for(i = *pc; i < pf->patch_count && *max_size >= 8; ++i) {
+        if(be)
+            op = pbuf[0] >> 5;
+        else
+            op = pbuf[3] >> 5;
+
+        switch(op) {
+            case 0x00:  /* patch32 */
+            case 0x04:  /* patch16 */
+            case 0x02:  /* patch8 */
+                /* These are always exactly 8 bytes in length, so this is easy
+                   compared to the other cases... */
+                memcpy(buf, pbuf, 8);
+                pbuf += 8;
+                buf += 8;
+                *max_size -= 8;
+                *off += 8;
+                *pc += 1;
+                *np += 1;
+                break;
+
+            case 0x01:  /* multi32 */
+            case 0x05:  /* multi16 */
+            case 0x03:  /* multi8 */
+                /* Figure out how long the block is. We could split these up
+                   and send them in separate packets, but I choose not to do
+                   that for simplicity... */
+                cnt = U8_TO_U32((pbuf + 4), be);
+                cnt = cnt * 4 + 12;
+
+                /* Is this one too large to fit? */
+                if(cnt > *max_size)
+                    return buf;
+
+                /* We've got space for it, so copy it over. */
+                memcpy(buf, pbuf, cnt);
+                pbuf += cnt;
+                buf += cnt;
+                *max_size -= cnt;
+                *off += cnt;
+                *pc += 1;
+                *np += 1;
+                break;
+
+            case 0x06:  /* block32 */
+            case 0x07:
+                /* Figure out how long the block is. We could split these up
+                   and send them in separate packets, but I choose not to do
+                   that for simplicity... */
+                cnt = U8_TO_U32((pbuf + 4), be);
+                cnt = cnt * 4 + 8;
+
+                /* Is this one too large to fit? */
+                if(cnt > *max_size)
+                    return buf;
+
+                /* We've got space for it, so copy it over. */
+                memcpy(buf, pbuf, cnt);
+                pbuf += cnt;
+                buf += cnt;
+                *max_size -= cnt;
+                *off += cnt;
+                *pc += 1;
+                *np += 1;
+                break;
+        }
+    }
+
+    return buf;
+}
+
+/* This is ugly. I really don't like this, but it should (hopefully) work and
+   handle all the different cases we might have for calling it... */
+uint32_t patch_build_packet(void *buf, uint32_t max_size, patch_file_t **iter,
+                            uint32_t *status, int be) {
+    uint16_t off, pc;
+    uint32_t np = 0;
+    patch_file_t *pf, *prev;
+    uint8_t *tbuf = (uint8_t *)buf + 4, *tbuf2;
+
+    /* Make sure we have something to work with... */
+    if(!buf || max_size < 12 || !iter || !status)
+        return (uint32_t)-1;
+
+    off = (*status) & 0xFFFF;
+    pc = ((*status) >> 16) & 0xFFFF;
+    pf = *iter;
+    max_size -= 4;
+
+    while(pf && max_size >= 8) {
+        /* Do we have enough buffer left to copy over the entire patch? */
+        if(pf->length - off <= max_size) {
+            memcpy(tbuf, pf->data + off, pf->length - off);
+            tbuf += pf->length - off;
+            max_size -= pf->length - off;
+            np += pf->patch_count - pc;
+            prev = pf;
+            pf = pf->next;
+            off = 0;
+            pc = 0;
+
+            patch_file_free(prev);
+        }
+        else {
+            /* Otherwise, we have to parse it and go until we are done... */
+            tbuf = patch_add_part(tbuf, &max_size, pf, &off, &pc, &np, be);
+            break;
+        }
+    }
+
+    /* Do we still have stuff to do? */
+    if(pf) {
+        *iter = pf;
+        *status = (pc << 16) | off;
+    }
+    else {
+        *iter = NULL;
+        *status = 0;
+    }
+
+    /* Write the patch count into the packet. */
+    tbuf2 = (uint8_t *)buf;
+    if(be) {
+        tbuf2[0] = (uint8_t)(np >> 24);
+        tbuf2[1] = (uint8_t)(np >> 16);
+        tbuf2[2] = (uint8_t)(np >> 8);
+        tbuf2[3] = (uint8_t)np;
+    }
+    else {
+        tbuf2[3] = (uint8_t)(np >> 24);
+        tbuf2[2] = (uint8_t)(np >> 16);
+        tbuf2[1] = (uint8_t)(np >> 8);
+        tbuf2[0] = (uint8_t)np;
+    }
+
+    return tbuf - (uint8_t *)buf;
 }
