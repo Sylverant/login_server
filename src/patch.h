@@ -61,5 +61,8 @@ typedef struct patch_file {
 patch_file_t *patch_file_read(const char *fn);
 void patch_file_free(patch_file_t *f);
 
+uint32_t patch_build_packet(void *buf, uint32_t max_size, patch_file_t **iter,
+                            uint32_t *status, int be);
+
 
 #endif /* !PATCH_H */

@@ -811,6 +811,7 @@ static int handle_gchlcheck(login_client_t *c, gc_hlcheck_pkt *pkt) {
                 CLIENT_EXTVER_GC_REG_US;
             break;
 
+        case 0x35:
         case 0x39: /* Episode 1 & 2 Plus (Japan) */
             c->type = CLIENT_TYPE_GC;
             c->ext_version |= CLIENT_EXTVER_GC_EP12PLUS |
