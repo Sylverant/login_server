@@ -2546,11 +2546,12 @@ int send_gc_version_detect(login_client_t *c) {
 int send_single_patch_dc(login_client_t *c, const patchset_t *p) {
     patch_send_pkt *pkt = (patch_send_pkt *)sendbuf;
     uint16_t size;
-    uint16_t code_len = patch_stub_dc_len;
+    uint16_t code_len;
     patch_send_footer *ftr;
     patch_file_t *pf;
     char fn[256];                       /* XXXX */
     uint32_t v;
+    int rv;
 
     /* Make sure we don't accidentially send this to any V1 or NTE clients. */
     v = c->ext_version & CLIENT_EXTVER_DC_VER_MASK;
@@ -2571,36 +2572,45 @@ int send_single_patch_dc(login_client_t *c, const patchset_t *p) {
     pkt->crc_length = LE32(0x00000000);
     pkt->code_begin = LE32(4);
     memcpy(pkt->code, patch_stub_dc, patch_stub_dc_len);
-    pkt->code[patch_stub_dc_len] = (uint8_t)pf->patch_count;
-    pkt->code[patch_stub_dc_len + 1] = (uint8_t)(pf->patch_count >> 8);
-    pkt->code[patch_stub_dc_len + 2] = (uint8_t)(pf->patch_count >> 16);
-    pkt->code[patch_stub_dc_len + 3] = (uint8_t)(pf->patch_count >> 24);
-    memcpy(pkt->code + patch_stub_dc_len + 4, pf->data, pf->length);
-    code_len += 4 + pf->length;
 
-    patch_file_free(pf);
+    while(pf) {
+        code_len = patch_stub_dc_len;
+        v = 0;
 
-    /* Fill in the rest... */
-    size = DC_PATCH_HEADER_LENGTH + DC_PATCH_FOOTER_LENGTH + code_len;
-    pkt->entry_offset = LE32(size - 0x08);
+        /* Copy the patch data to the packet, as best we can. If this finishes,
+           it will clean up the patch file for us, otherwise, it'll do it on a
+           future pass... */
+        code_len += patch_build_packet(pkt->code + patch_stub_dc_len,
+                                       800 - patch_stub_dc_len, &pf, &v, 0);
 
-    /* Fill in the footer... */
-    ftr = (patch_send_footer *)(sendbuf + DC_PATCH_HEADER_LENGTH +
-                                code_len);
-    ftr->offset_count = LE32(size - 0x14);
-    ftr->num_ptrs = LE32(1);
-    ftr->unk1 = ftr->unk2 = 0;
-    ftr->offset_start = 0;
-    ftr->offset_entry = 0;
-    ftr->offsets[0] = 0;                /* Padding... Not actually used. */
+        /* Fill in the rest... */
+        size = DC_PATCH_HEADER_LENGTH + DC_PATCH_FOOTER_LENGTH + code_len;
+        pkt->entry_offset = LE32(size - 0x08);
 
-    /* Fill in the header. */
-    pkt->hdr.dc.pkt_type = PATCH_TYPE;
-    pkt->hdr.dc.flags = 0;
-    pkt->hdr.dc.pkt_len = LE16(size);
+        /* Fill in the footer... */
+        ftr = (patch_send_footer *)(sendbuf + DC_PATCH_HEADER_LENGTH +
+                                    code_len);
+        ftr->offset_count = LE32(size - 0x14);
+        ftr->num_ptrs = LE32(1);
+        ftr->unk1 = ftr->unk2 = 0;
+        ftr->offset_start = 0;
+        ftr->offset_entry = 0;
+        ftr->offsets[0] = 0;                /* Padding... Not actually used. */
 
-    /* Send the packet away */
-    return crypt_send(c, size);
+        /* Fill in the header. */
+        pkt->hdr.dc.pkt_type = PATCH_TYPE;
+        pkt->hdr.dc.flags = 0;
+        pkt->hdr.dc.pkt_len = LE16(size);
+
+        /* Send the packet away */
+        if((rv = crypt_send(c, size)) < 0) {
+            if(pf)
+                patch_file_free(pf);
+            return rv;
+        }
+    }
+
+    return 0;
 }
 
 static int send_single_patch_gc_inval(login_client_t *c, const patchset_t *p) {
