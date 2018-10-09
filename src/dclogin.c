@@ -473,6 +473,7 @@ static int handle_ntelogin8b(login_client_t *c, dcnte_login_8b_pkt *pkt) {
         sylverant_db_result_free(result);
     }
 
+    c->guildcard = gc;
     send_dc_security(c, gc, NULL, 0);
     return send_ship_list(c, 0);
 }
@@ -631,6 +632,7 @@ static int handle_login3(login_client_t *c, dc_login_93_pkt *pkt) {
         sylverant_db_result_free(result);
     }
 
+    c->guildcard = gc;
     return send_dc_security(c, gc, NULL, 0);
 }
 
@@ -1055,6 +1057,7 @@ static int handle_gclogine(login_client_t *c, gc_login_9e_pkt *pkt) {
         if(c->type == CLIENT_TYPE_GC && v != CLIENT_EXTVER_GC_EP12PLUS)
             send_gc_version_detect(c);
 
+        c->guildcard = gc;
         return send_dc_security(c, gc, NULL, 0);
     }
 
@@ -1232,7 +1235,20 @@ static int handle_char_data(login_client_t *c, dc_char_data_pkt *pkt) {
     player_t *pl = &pkt->data;
     uint32_t v;
 
-    /* If we don't have a legit mode set, then everyone's legit! */
+    /* Make sure some basic stuff is in range. */
+    v = LE32(pl->v1.level);
+    if(v > 199) {
+        send_large_msg(c, __(c, "\tEHacked characters are not allowed\n"
+                                "on this server.\n\n"
+                                "This will be reported to the server\n"
+                                "administration."));
+        debug(DBG_WARN, "Character with invalid level (%d) detected!\n"
+              "    Guild card: %" PRIu32 "\n", v + 1, c->guildcard);
+        return -1;
+    }
+
+    /* If we don't have a legit mode set, then everyone's legit,
+       as long as they passed the earlier checks. */
     if(!limits) {
         return 0;
     }
