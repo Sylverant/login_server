@@ -1,6 +1,6 @@
 /*
     Sylverant Login Server
-    Copyright (C) 2009, 2010, 2011, 2013, 2015, 2017, 2018 Lawrence Sebald
+    Copyright (C) 2009, 2010, 2011, 2013, 2015, 2017, 2018, 2019 Lawrence Sebald
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License version 3
@@ -1244,6 +1244,17 @@ static int handle_char_data(login_client_t *c, dc_char_data_pkt *pkt) {
                                 "administration."));
         debug(DBG_WARN, "Character with invalid level (%d) detected!\n"
               "    Guild card: %" PRIu32 "\n", v + 1, c->guildcard);
+        return -1;
+    }
+
+    if(pl->v1.model != 0 || (pl->v1.v2flags & 0x02)) {
+        send_large_msg(c, __(c, "\tEHacked characters are not allowed\n"
+                                "on this server.\n\n"
+                                "This will be reported to the server\n"
+                                "administration."));
+        debug(DBG_WARN, "Character with invalid model (%d:%02x) detected!\n"
+              "    Guild card: %" PRIu32 "\n", (int)pl->v1.model,
+              pl->v1.v2flags, c->guildcard);
         return -1;
     }
 
