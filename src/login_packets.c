@@ -1,6 +1,6 @@
 /*
     Sylverant Login Server
-    Copyright (C) 2009, 2010, 2011, 2012, 2013, 2015, 2018 Lawrence Sebald
+    Copyright (C) 2009, 2010, 2011, 2012, 2013, 2015, 2018, 2019 Lawrence Sebald
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License version 3
@@ -767,7 +767,7 @@ static int send_ship_list_dc(login_client_t *c, uint16_t menu_code) {
     uint32_t num_ships = 0;
     void *result;
     char **row;
-    uint32_t ship_id, players;
+    uint32_t ship_id, players, priv;
     int i, len = 0x20, gm_only, flags, ship_num;
     char tmp[3] = { menu_code, menu_code >> 8, 0 };
 
@@ -814,9 +814,9 @@ static int send_ship_list_dc(login_client_t *c, uint16_t menu_code) {
     }
 
     /* Get ready to query the database */
-    sprintf(query, "SELECT ship_id, name, players, gm_only, ship_number FROM "
-            "online_ships WHERE menu_code='%hu' AND (flags & 0x%02x) = 0 ORDER "
-            "BY ship_number", menu_code, flags);
+    sprintf(query, "SELECT ship_id, name, players, gm_only, ship_number, "
+            "privileges FROM online_ships WHERE menu_code='%hu' AND "
+            "(flags & 0x%02x) = 0 ORDER BY ship_number", menu_code, flags);
 
     /* Query the database and see what we've got */
     if(sylverant_db_query(&conn, query)) {
@@ -832,35 +832,39 @@ static int send_ship_list_dc(login_client_t *c, uint16_t menu_code) {
     /* As long as we have some rows, go */
     while((row = sylverant_db_result_fetch(result))) {
         gm_only = atoi(row[3]);
+        priv = strtoul(row[5], NULL, 0);
 
-        if(!gm_only || IS_GLOBAL_GM(c)) {
-            /* Clear out the ship information */
-            memset(&pkt->entries[num_ships], 0, 0x1C);
+        if(gm_only && !IS_GLOBAL_GM(c))
+            continue;
+        else if(!IS_GLOBAL_GM(c) && (priv & c->priv) != priv)
+            continue;
 
-            /* Grab info from the row */
-            ship_id = (uint32_t)strtoul(row[0], NULL, 0);
-            players = (uint32_t)strtoul(row[2], NULL, 0);
-            ship_num = atoi(row[4]);
+        /* Clear out the ship information */
+        memset(&pkt->entries[num_ships], 0, 0x1C);
 
-            /* Fill in what we have */
-            pkt->entries[num_ships].menu_id = LE32(0x00000001);
-            pkt->entries[num_ships].item_id = LE32(ship_id);
-            pkt->entries[num_ships].flags = LE16(0x0F04);
+        /* Grab info from the row */
+        ship_id = (uint32_t)strtoul(row[0], NULL, 0);
+        players = (uint32_t)strtoul(row[2], NULL, 0);
+        ship_num = atoi(row[4]);
 
-            /* Create the name string */
-            if(menu_code) {
-                sprintf(pkt->entries[num_ships].name, "%02X:%c%c/%s", ship_num,
-                        (char)menu_code, (char)(menu_code >> 8), row[1]);
-            }
-            else {
-                sprintf(pkt->entries[num_ships].name, "%02X:%s", ship_num,
-                        row[1]);
-            }
+        /* Fill in what we have */
+        pkt->entries[num_ships].menu_id = LE32(0x00000001);
+        pkt->entries[num_ships].item_id = LE32(ship_id);
+        pkt->entries[num_ships].flags = LE16(0x0F04);
 
-            /* We're done with this ship, increment the counter */
-            ++num_ships;
-            len += 0x1C;
+        /* Create the name string */
+        if(menu_code) {
+            sprintf(pkt->entries[num_ships].name, "%02X:%c%c/%s", ship_num,
+                    (char)menu_code, (char)(menu_code >> 8), row[1]);
         }
+        else {
+            sprintf(pkt->entries[num_ships].name, "%02X:%s", ship_num,
+                    row[1]);
+        }
+
+        /* We're done with this ship, increment the counter */
+        ++num_ships;
+        len += 0x1C;
     }
 
     sylverant_db_result_free(result);
@@ -954,7 +958,7 @@ static int send_ship_list_pc(login_client_t *c, uint16_t menu_code) {
     uint32_t num_ships = 0;
     void *result;
     char **row;
-    uint32_t ship_id, players;
+    uint32_t ship_id, players, priv;
     int i, len = 0x30, gm_only, ship_num;
     iconv_t ic = iconv_open("UTF-16LE", "UTF-8");
     size_t in, out;
@@ -987,9 +991,9 @@ static int send_ship_list_pc(login_client_t *c, uint16_t menu_code) {
     num_ships = 1;
 
     /* Get ready to query the database */
-    sprintf(query, "SELECT ship_id, name, players, gm_only, ship_number FROM "
-            "online_ships WHERE menu_code='%hu' AND (flags & 0x40) = 0 ORDER "
-            "BY ship_number", menu_code);
+    sprintf(query, "SELECT ship_id, name, players, gm_only, ship_number, "
+            "privileges FROM online_ships WHERE menu_code='%hu' AND "
+            "(flags & 0x40) = 0 ORDER BY ship_number", menu_code);
 
     /* Query the database and see what we've got */
     if(sylverant_db_query(&conn, query)) {
@@ -1005,41 +1009,45 @@ static int send_ship_list_pc(login_client_t *c, uint16_t menu_code) {
     /* As long as we have some rows, go */
     while((row = sylverant_db_result_fetch(result))) {
         gm_only = atoi(row[3]);
+        priv = strtoul(row[5], NULL, 0);
 
-        if(!gm_only || IS_GLOBAL_GM(c)) {
-            /* Clear out the ship information */
-            memset(&pkt->entries[num_ships], 0, 0x2C);
+        if(gm_only && !IS_GLOBAL_GM(c))
+            continue;
+        else if(!IS_GLOBAL_GM(c) && (priv & c->priv) != priv)
+            continue;
 
-            /* Grab info from the row */
-            ship_id = (uint32_t)strtoul(row[0], NULL, 0);
-            players = (uint32_t)strtoul(row[2], NULL, 0);
-            ship_num = atoi(row[4]);
+        /* Clear out the ship information */
+        memset(&pkt->entries[num_ships], 0, 0x2C);
 
-            /* Fill in what we have */
-            pkt->entries[num_ships].menu_id = LE32(0x00000001);
-            pkt->entries[num_ships].item_id = LE32(ship_id);
-            pkt->entries[num_ships].flags = LE16(0x0F04);
+        /* Grab info from the row */
+        ship_id = (uint32_t)strtoul(row[0], NULL, 0);
+        players = (uint32_t)strtoul(row[2], NULL, 0);
+        ship_num = atoi(row[4]);
 
-            /* Create the name string (UTF-8) */
-            if(menu_code) {
-                sprintf(tmp, "%02X:%c%c/%s", ship_num, (char)menu_code,
-                        (char)(menu_code >> 8), row[1]);
-            }
-            else {
-                sprintf(tmp, "%02X:%s", ship_num, row[1]);
-            }
+        /* Fill in what we have */
+        pkt->entries[num_ships].menu_id = LE32(0x00000001);
+        pkt->entries[num_ships].item_id = LE32(ship_id);
+        pkt->entries[num_ships].flags = LE16(0x0F04);
 
-            /* And convert to UTF-16 */
-            in = strlen(tmp);
-            out = 0x22;
-            inptr = tmp;
-            outptr = (char *)pkt->entries[num_ships].name;
-            iconv(ic, &inptr, &in, &outptr, &out);
-
-            /* We're done with this ship, increment the counter */
-            ++num_ships;
-            len += 0x2C;
+        /* Create the name string (UTF-8) */
+        if(menu_code) {
+            sprintf(tmp, "%02X:%c%c/%s", ship_num, (char)menu_code,
+                    (char)(menu_code >> 8), row[1]);
         }
+        else {
+            sprintf(tmp, "%02X:%s", ship_num, row[1]);
+        }
+
+        /* And convert to UTF-16 */
+        in = strlen(tmp);
+        out = 0x22;
+        inptr = tmp;
+        outptr = (char *)pkt->entries[num_ships].name;
+        iconv(ic, &inptr, &in, &outptr, &out);
+
+        /* We're done with this ship, increment the counter */
+        ++num_ships;
+        len += 0x2C;
     }
 
     sylverant_db_result_free(result);
@@ -1148,7 +1156,7 @@ static int send_ship_list_bb(login_client_t *c, uint16_t menu_code) {
     uint32_t num_ships = 0;
     void *result;
     char **row;
-    uint32_t ship_id, players;
+    uint32_t ship_id, players, priv;
     int i, len = 0x34, gm_only, ship_num;
     iconv_t ic = iconv_open("UTF-16LE", "UTF-8");
     size_t in, out;
@@ -1181,9 +1189,9 @@ static int send_ship_list_bb(login_client_t *c, uint16_t menu_code) {
     num_ships = 1;
 
     /* Get ready to query the database */
-    sprintf(query, "SELECT ship_id, name, players, gm_only, ship_number FROM "
-            "online_ships WHERE menu_code='%hu' AND (flags & 0x200) = 0 ORDER "
-            "BY ship_number", menu_code);
+    sprintf(query, "SELECT ship_id, name, players, gm_only, ship_number, "
+            "privileges FROM online_ships WHERE menu_code='%hu' AND "
+            "(flags & 0x200) = 0 ORDER BY ship_number", menu_code);
 
     /* Query the database and see what we've got */
     if(sylverant_db_query(&conn, query)) {
@@ -1199,41 +1207,45 @@ static int send_ship_list_bb(login_client_t *c, uint16_t menu_code) {
     /* As long as we have some rows, go */
     while((row = sylverant_db_result_fetch(result))) {
         gm_only = atoi(row[3]);
+        priv = strtoul(row[5], NULL, 0);
 
-        if(!gm_only || IS_GLOBAL_GM(c)) {
-            /* Clear out the ship information */
-            memset(&pkt->entries[num_ships], 0, 0x2C);
+        if(gm_only && !IS_GLOBAL_GM(c))
+            continue;
+        else if(!IS_GLOBAL_GM(c) && (priv & c->priv) != priv)
+            continue;
 
-            /* Grab info from the row */
-            ship_id = (uint32_t)strtoul(row[0], NULL, 0);
-            players = (uint32_t)strtoul(row[2], NULL, 0);
-            ship_num = atoi(row[4]);
+        /* Clear out the ship information */
+        memset(&pkt->entries[num_ships], 0, 0x2C);
 
-            /* Fill in what we have */
-            pkt->entries[num_ships].menu_id = LE32(0x00000001);
-            pkt->entries[num_ships].item_id = LE32(ship_id);
-            pkt->entries[num_ships].flags = LE16(0x0F04);
+        /* Grab info from the row */
+        ship_id = (uint32_t)strtoul(row[0], NULL, 0);
+        players = (uint32_t)strtoul(row[2], NULL, 0);
+        ship_num = atoi(row[4]);
 
-            /* Create the name string (UTF-8) */
-            if(menu_code) {
-                sprintf(tmp, "%02X:%c%c/%s", ship_num, (char)menu_code,
-                        (char)(menu_code >> 8), row[1]);
-            }
-            else {
-                sprintf(tmp, "%02X:%s", ship_num, row[1]);
-            }
+        /* Fill in what we have */
+        pkt->entries[num_ships].menu_id = LE32(0x00000001);
+        pkt->entries[num_ships].item_id = LE32(ship_id);
+        pkt->entries[num_ships].flags = LE16(0x0F04);
 
-            /* And convert to UTF-16 */
-            in = strlen(tmp);
-            out = 0x22;
-            inptr = tmp;
-            outptr = (char *)pkt->entries[num_ships].name;
-            iconv(ic, &inptr, &in, &outptr, &out);
-
-            /* We're done with this ship, increment the counter */
-            ++num_ships;
-            len += 0x2C;
+        /* Create the name string (UTF-8) */
+        if(menu_code) {
+            sprintf(tmp, "%02X:%c%c/%s", ship_num, (char)menu_code,
+                    (char)(menu_code >> 8), row[1]);
         }
+        else {
+            sprintf(tmp, "%02X:%s", ship_num, row[1]);
+        }
+
+        /* And convert to UTF-16 */
+        in = strlen(tmp);
+        out = 0x22;
+        inptr = tmp;
+        outptr = (char *)pkt->entries[num_ships].name;
+        iconv(ic, &inptr, &in, &outptr, &out);
+
+        /* We're done with this ship, increment the counter */
+        ++num_ships;
+        len += 0x2C;
     }
 
     sylverant_db_result_free(result);

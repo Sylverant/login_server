@@ -1,6 +1,6 @@
 /*
     Sylverant Login Server
-    Copyright (C) 2009, 2010, 2011, 2012, 2013, 2018 Lawrence Sebald
+    Copyright (C) 2009, 2010, 2011, 2012, 2013, 2018, 2019 Lawrence Sebald
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License version 3
@@ -93,7 +93,7 @@ typedef struct login_client {
     uint32_t flags;
 
     int language_code;
-    int is_gm;
+    uint32_t priv;
     uint16_t port;
     uint32_t ext_version;
 
@@ -130,8 +130,8 @@ typedef struct login_client {
 #define CLIENT_PRIV_LOCAL_ROOT  0x04
 #define CLIENT_PRIV_GLOBAL_ROOT 0x08
 
-#define IS_GLOBAL_GM(c)     (!!((c)->is_gm & CLIENT_PRIV_GLOBAL_GM))
-#define IS_GLOBAL_ROOT(c)   (!!((c)->is_gm & CLIENT_PRIV_GLOBAL_ROOT))
+#define IS_GLOBAL_GM(c)     (!!((c)->priv & CLIENT_PRIV_GLOBAL_GM))
+#define IS_GLOBAL_ROOT(c)   (!!((c)->priv & CLIENT_PRIV_GLOBAL_ROOT))
 
 /* Values for the type of the login_client_t */
 #define CLIENT_TYPE_DC              0

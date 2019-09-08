@@ -379,7 +379,7 @@ static int handle_ntelogin8a(login_client_t *c, dcnte_login_8a_pkt *pkt) {
 
     if(result) {
         if((row = sylverant_db_result_fetch(result))) {
-            c->is_gm = atoi(row[0]);
+            c->priv = strtoul(row[0], NULL, 0);
         }
 
         sylverant_db_result_free(result);
@@ -467,7 +467,7 @@ static int handle_ntelogin8b(login_client_t *c, dcnte_login_8b_pkt *pkt) {
 
     if(result) {
         if((row = sylverant_db_result_fetch(result))) {
-            c->is_gm = atoi(row[0]);
+            c->priv = strtoul(row[0], NULL, 0);
         }
 
         sylverant_db_result_free(result);
@@ -626,7 +626,7 @@ static int handle_login3(login_client_t *c, dc_login_93_pkt *pkt) {
 
     if(result) {
         if((row = sylverant_db_result_fetch(result))) {
-            c->is_gm = atoi(row[0]);
+            c->priv = strtoul(row[0], NULL, 0);
         }
 
         sylverant_db_result_free(result);
@@ -752,7 +752,7 @@ static int handle_logina(login_client_t *c, dcv2_login_9a_pkt *pkt) {
 
     if(result) {
         if((row = sylverant_db_result_fetch(result))) {
-            c->is_gm = atoi(row[0]);
+            c->priv = strtoul(row[0], NULL, 0);
         }
 
         sylverant_db_result_free(result);
@@ -926,7 +926,7 @@ static int handle_gchlcheck(login_client_t *c, gc_hlcheck_pkt *pkt) {
         result = sylverant_db_result_store(&conn);
 
         if((row = sylverant_db_result_fetch(result))) {
-            c->is_gm = atoi(row[0]);
+            c->priv = strtoul(row[0], NULL, 0);
             return send_simple(c, LOGIN_9A_TYPE, LOGIN_DB_OK);
         }
     }
