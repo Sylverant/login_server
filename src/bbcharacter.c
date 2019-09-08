@@ -301,7 +301,7 @@ static int handle_bb_login(login_client_t *c, bb_login_93_pkt *pkt) {
     /* Grab the rest of what we care about from the query... */
     errno = 0;
     c->team_id = (uint32_t)strtoul(row[2], NULL, 0);
-    c->is_gm = (uint32_t)strtoul(row[3], NULL, 0);
+    c->priv = (uint32_t)strtoul(row[3], NULL, 0);
     c->guildcard = (uint32_t)strtoul(row[4], NULL, 0);
     c->account_id = (uint32_t)strtoul(row[0], NULL, 0);
     c->flags = (uint32_t)strtoul(row[6], NULL, 0);
