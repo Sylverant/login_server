@@ -42,6 +42,7 @@ extern sylverant_dbconn_t conn;
 extern sylverant_quest_list_t qlist[CLIENT_TYPE_COUNT][CLIENT_LANG_COUNT];
 extern sylverant_limits_t *limits;
 extern volatile sig_atomic_t shutting_down;
+static uint32_t next_pcnte_gc = 500;
 
 void print_packet(unsigned char *pkt, int len) {
     unsigned char *pos = pkt, *row = pkt;
@@ -636,6 +637,17 @@ static int handle_login3(login_client_t *c, dc_login_93_pkt *pkt) {
     return send_dc_security(c, gc, NULL, 0);
 }
 
+static int is_pctrial(dcv2_login_9a_pkt *pkt) {
+    int i = 0;
+
+    for(i = 0; i < 8; ++i) {
+        if(pkt->serial[i] || pkt->access_key[i])
+            return 0;
+    }
+
+    return 1;
+}
+
 /* Handle a client's login request packet (yes, this function is the same as the
    one above, but it uses a different structure). */
 static int handle_logina(login_client_t *c, dcv2_login_9a_pkt *pkt) {
@@ -657,108 +669,120 @@ static int handle_logina(login_client_t *c, dcv2_login_9a_pkt *pkt) {
 
     c->version = SYLVERANT_QUEST_V2;
 
-    /* Escape all the important strings. */
-    sylverant_db_escape_str(&conn, dc_id, pkt->dc_id, 8);
-    sylverant_db_escape_str(&conn, serial, pkt->serial, 8);
-    sylverant_db_escape_str(&conn, access, pkt->access_key, 8);
+    if(!is_pctrial(pkt)) {
+        /* Escape all the important strings. */
+        sylverant_db_escape_str(&conn, dc_id, pkt->dc_id, 8);
+        sylverant_db_escape_str(&conn, serial, pkt->serial, 8);
+        sylverant_db_escape_str(&conn, access, pkt->access_key, 8);
 
-    if(c->type != CLIENT_TYPE_PC) {
-        sprintf(query, "SELECT guildcard FROM dreamcast_clients WHERE "
-                "(dc_id='%s' OR dc_id IS NULL) AND serial_number='%s' AND "
-                "access_key='%s'", dc_id, serial, access);
-        c->ext_version = CLIENT_EXTVER_DC | CLIENT_EXTVER_DCV2;
-    }
-    else {
-        sprintf(query, "SELECT guildcard FROM pc_clients WHERE "
-                "serial_number='%s' AND access_key='%s'", serial, access);
-        c->ext_version = CLIENT_EXTVER_PC;
-    }
+        if(c->type != CLIENT_TYPE_PC) {
+            sprintf(query, "SELECT guildcard FROM dreamcast_clients WHERE "
+                    "(dc_id='%s' OR dc_id IS NULL) AND serial_number='%s' AND "
+                    "access_key='%s'", dc_id, serial, access);
+            c->ext_version = CLIENT_EXTVER_DC | CLIENT_EXTVER_DCV2;
+        }
+        else {
+            sprintf(query, "SELECT guildcard FROM pc_clients WHERE "
+                    "serial_number='%s' AND access_key='%s'", serial, access);
+            c->ext_version = CLIENT_EXTVER_PC;
+        }
 
-    /* If we can't query the database, fail. */
-    if(sylverant_db_query(&conn, query)) {
-        return send_simple(c, LOGIN_9A_TYPE, LOGIN_9A_ERROR);
-    }
-
-    result = sylverant_db_result_store(&conn);
-
-    if((row = sylverant_db_result_fetch(result))) {
-        /* We have seen this client before, save their guildcard for use. */
-        gc = (uint32_t)strtoul(row[0], NULL, 0);
-        sylverant_db_result_free(result);
-    }
-    else if(c->type == CLIENT_TYPE_PC) {
-        /* If we're here, then that means either the PSOPC user is not
-           registered or they've put their information in wrong. Disconnect them
-           so that they can fix that problem. */
-        sylverant_db_result_free(result);
-        return send_simple(c, LOGIN_9A_TYPE, LOGIN_9A_BAD_SERIAL);
-    }
-    else {
-        /* If we get here, we have a PSOv2 (DC) user that isn't known to the
-           server yet. Give them a nice fresh guildcard. */
-        sylverant_db_result_free(result);
-
-        /* Assign a nice fresh new guildcard number to the client. */
-        sprintf(query, "INSERT INTO guildcards (account_id) VALUES (NULL)");
-
+        /* If we can't query the database, fail. */
         if(sylverant_db_query(&conn, query)) {
             return send_simple(c, LOGIN_9A_TYPE, LOGIN_9A_ERROR);
         }
 
-        /* Grab the new guildcard for the user. */
-        gc = (uint32_t)sylverant_db_insert_id(&conn);
+        result = sylverant_db_result_store(&conn);
 
-        /* Add the client into our database. */
-        sprintf(query, "INSERT INTO dreamcast_clients (guildcard, "
-                "serial_number, access_key, dc_id) VALUES ('%u', '%s', '%s', "
-                "'%s')", gc, serial, access, dc_id);
-
-        if(sylverant_db_query(&conn, query)) {
-            return send_simple(c, LOGIN_9A_TYPE, LOGIN_9A_ERROR);
-        }
-    }
-
-    /* Make sure the guildcard isn't banned. */
-    banned = is_gc_banned(gc, &banlen, query);
-
-    if(banned == -1) {
-        return send_simple(c, LOGIN_9A_TYPE, LOGIN_9A_ERROR);
-    }
-    else if(banned) {
-        send_ban_msg(c, banlen, query);
-        return -1;
-    }
-
-    /* Make sure the guildcard isn't online already. */
-    banned = is_gc_online(gc);
-
-    if(banned == -1) {
-        return send_simple(c, LOGIN_9A_TYPE, LOGIN_9A_ERROR);
-    }
-    else if(banned) {
-        send_large_msg(c, __(c, "\tEYour guildcard is already online."));
-        return -1;
-    }
-
-    /* Check if the user is a GM or not. */
-    sprintf(query, "SELECT privlevel FROM account_data NATURAL JOIN guildcards "
-            "WHERE guildcard='%u'", gc);
-
-    if(sylverant_db_query(&conn, query)) {
-        return send_simple(c, LOGIN_9A_TYPE, LOGIN_9A_ERROR);
-    }
-
-    result = sylverant_db_result_store(&conn);
-
-    if(result) {
         if((row = sylverant_db_result_fetch(result))) {
-            c->priv = strtoul(row[0], NULL, 0);
+            /* We have seen this client before, save their guildcard for use. */
+            gc = (uint32_t)strtoul(row[0], NULL, 0);
+            sylverant_db_result_free(result);
+        }
+        else if(c->type == CLIENT_TYPE_PC) {
+            /* If we're here, then that means either the PSOPC user is not
+               registered or they've put their information in wrong. Disconnect
+               them so that they can fix that problem. */
+            sylverant_db_result_free(result);
+            return send_simple(c, LOGIN_9A_TYPE, LOGIN_9A_BAD_SERIAL);
+        }
+        else {
+            /* If we get here, we have a PSOv2 (DC) user that isn't known to the
+               server yet. Give them a nice fresh guildcard. */
+            sylverant_db_result_free(result);
+
+            /* Assign a nice fresh new guildcard number to the client. */
+            sprintf(query, "INSERT INTO guildcards (account_id) VALUES (NULL)");
+
+            if(sylverant_db_query(&conn, query)) {
+                return send_simple(c, LOGIN_9A_TYPE, LOGIN_9A_ERROR);
+            }
+
+            /* Grab the new guildcard for the user. */
+            gc = (uint32_t)sylverant_db_insert_id(&conn);
+
+            /* Add the client into our database. */
+            sprintf(query, "INSERT INTO dreamcast_clients (guildcard, "
+                    "serial_number, access_key, dc_id) VALUES ('%u', '%s', "
+                    "'%s', '%s')", gc, serial, access, dc_id);
+
+            if(sylverant_db_query(&conn, query)) {
+                return send_simple(c, LOGIN_9A_TYPE, LOGIN_9A_ERROR);
+            }
         }
 
-        sylverant_db_result_free(result);
-    }
+        /* Make sure the guildcard isn't banned. */
+        banned = is_gc_banned(gc, &banlen, query);
 
-    c->guildcard = gc;
+        if(banned == -1) {
+            return send_simple(c, LOGIN_9A_TYPE, LOGIN_9A_ERROR);
+        }
+        else if(banned) {
+            send_ban_msg(c, banlen, query);
+            return -1;
+        }
+
+        /* Make sure the guildcard isn't online already. */
+        banned = is_gc_online(gc);
+
+        if(banned == -1) {
+            return send_simple(c, LOGIN_9A_TYPE, LOGIN_9A_ERROR);
+        }
+        else if(banned) {
+            send_large_msg(c, __(c, "\tEYour guildcard is already online."));
+            return -1;
+        }
+
+        /* Check if the user is a GM or not. */
+        sprintf(query, "SELECT privlevel FROM account_data NATURAL JOIN "
+                "guildcards WHERE guildcard='%u'", gc);
+
+        if(sylverant_db_query(&conn, query)) {
+            return send_simple(c, LOGIN_9A_TYPE, LOGIN_9A_ERROR);
+        }
+
+        result = sylverant_db_result_store(&conn);
+
+        if(result) {
+            if((row = sylverant_db_result_fetch(result))) {
+                c->priv = strtoul(row[0], NULL, 0);
+            }
+
+            sylverant_db_result_free(result);
+        }
+
+        c->guildcard = gc;
+    }
+    else {
+        /* This is kinda inelegant, but it will mostly work... */
+        c->guildcard = next_pcnte_gc++;
+
+        /* Reset if we've reached the end of the list. */
+        if(next_pcnte_gc == 600)
+            next_pcnte_gc = 500;
+
+        c->ext_version = CLIENT_EXTVER_PC | CLIENT_EXTVER_PCNTE;
+    }
 
     /* Force them to send us a 0x9D so we have their language code, since this
        packet doesn't have it. */
@@ -1488,7 +1512,13 @@ int process_dclogin_packet(login_client_t *c, void *pkt) {
                 return tmp;
             }
 
-            return send_initial_menu(c);
+            /* Don't send the initial menu to the PC NTE, as there's no good
+               reason to send it quest files that it can't do anything useful
+               with. */
+            if(c->ext_version != (CLIENT_EXTVER_PC | CLIENT_EXTVER_PCNTE))
+                return send_initial_menu(c);
+            else
+                return send_ship_list(c, 0);
 
         case INFO_REQUEST_TYPE:
             /* XXXX: Relevance, at last! */
