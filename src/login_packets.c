@@ -1,6 +1,7 @@
 /*
     Sylverant Login Server
-    Copyright (C) 2009, 2010, 2011, 2012, 2013, 2015, 2018, 2019 Lawrence Sebald
+    Copyright (C) 2009, 2010, 2011, 2012, 2013, 2015, 2018, 2019,
+                  2020 Lawrence Sebald
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License version 3
@@ -991,9 +992,14 @@ static int send_ship_list_pc(login_client_t *c, uint16_t menu_code) {
     num_ships = 1;
 
     /* Get ready to query the database */
-    sprintf(query, "SELECT ship_id, name, players, gm_only, ship_number, "
-            "privileges FROM online_ships WHERE menu_code='%hu' AND "
-            "(flags & 0x40) = 0 ORDER BY ship_number", menu_code);
+    if(!(c->ext_version & CLIENT_EXTVER_PCNTE))
+        sprintf(query, "SELECT ship_id, name, players, gm_only, ship_number, "
+                "privileges FROM online_ships WHERE menu_code='%hu' AND "
+                "(flags & 0x40) = 0 ORDER BY ship_number", menu_code);
+    else
+        sprintf(query, "SELECT ship_id, name, players, gm_only, ship_number, "
+                "privileges FROM online_ships WHERE menu_code='%hu' AND "
+                "(flags & 0x1040) = 0 ORDER BY ship_number", menu_code);
 
     /* Query the database and see what we've got */
     if(sylverant_db_query(&conn, query)) {
