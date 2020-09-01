@@ -1,6 +1,7 @@
 /*
     Sylverant Login Server
-    Copyright (C) 2009, 2010, 2011, 2013, 2015, 2017, 2018, 2019 Lawrence Sebald
+    Copyright (C) 2009, 2010, 2011, 2013, 2015, 2017, 2018, 2019,
+                  2020 Lawrence Sebald
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License version 3
@@ -1092,12 +1093,16 @@ static int handle_gclogine(login_client_t *c, gc_login_9e_pkt *pkt) {
 }
 
 static int handle_logind(login_client_t *c, dcv2_login_9d_pkt *pkt) {
-    /* We made clients send this packet just specifically to grab the language
-       code... All the real checking has been done elsewhere. */
+    /* Well, this function used to be here just to fetch the language code, but
+       now we actually use more here, so I guess I shouldn't complain too much
+       about it anymore... */
     c->language_code = pkt->language_code;
 
-    /* XXXX: Probably should move this elsewhere... */
-    if(c->type == CLIENT_TYPE_DC)
+    /* The Gamecube Episode I & II trial looks like it's a Dreamcast client up
+       until this point. */
+    if(c->type == CLIENT_TYPE_DC && pkt->version == 0x30)
+        c->ext_version = CLIENT_EXTVER_DC | CLIENT_EXTVER_GC_TRIAL;
+    else if(c->type == CLIENT_TYPE_DC)
         send_dc_version_detect(c);
 
     return send_dc_security(c, c->guildcard, NULL, 0);
@@ -1541,7 +1546,7 @@ int process_dclogin_packet(login_client_t *c, void *pkt) {
             return handle_gclogine(c, (gc_login_9e_pkt *)pkt);
 
         case LOGIN_9D_TYPE:
-            /* XXXX: All this work for a language code... */
+            /* XXXX: All this work for a language and version code... */
             return handle_logind(c, (dcv2_login_9d_pkt *)pkt);
 
         case CHAR_DATA_TYPE:

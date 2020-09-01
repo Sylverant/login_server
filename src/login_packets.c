@@ -2868,7 +2868,8 @@ int send_patch_menu(login_client_t *c) {
         case CLIENT_TYPE_DC:
             /* Make sure we don't send this to V1 or NTE */
             v = c->ext_version & CLIENT_EXTVER_DC_VER_MASK;
-            if(v == CLIENT_EXTVER_DCV1 || v == CLIENT_EXTVER_DCNTE)
+            if(v == CLIENT_EXTVER_DCV1 || v == CLIENT_EXTVER_DCNTE ||
+               v == CLIENT_EXTVER_GC_TRIAL)
                 return 0;
             else if(c->det_version)
                 return send_patch_menu_dcgc(c);

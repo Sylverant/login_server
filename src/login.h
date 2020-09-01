@@ -156,6 +156,7 @@ typedef struct login_client {
 #define CLIENT_EXTVER_DCV2          (3 << 4)    /* Both v1/nte bits = v2 */
 #define CLIENT_EXTVER_DC_VER_MASK   (3 << 4)
 #define CLIENT_EXTVER_DC50HZ        (1 << 7)
+#define CLIENT_EXTVER_GC_TRIAL      (0 << 4)    /* No bits set = GC Trial */
 
 /* Subtypes for CLIENT_EXTVER_PC */
 #define CLIENT_EXTVER_PCNTE         (1 << 4)
