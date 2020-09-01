@@ -606,7 +606,8 @@ static int send_initial_menu_dc(login_client_t *c) {
     strcpy(pkt->entries[2].name, "Download Quest");
 
     /* Fill in the runtime patching entry, if they're available. */
-    if(v != CLIENT_EXTVER_DCV1 && patches_v2) {
+    if(v != CLIENT_EXTVER_DCV1  && v != CLIENT_EXTVER_GC_TRIAL &&
+       patches_v2) {
         pkt->entries[count + 1].menu_id = LE32(MENU_ID_INITIAL);
         pkt->entries[count + 1].item_id = LE32(ITEM_ID_INIT_PATCH);
         pkt->entries[count + 1].flags = LE16(0x0004);
