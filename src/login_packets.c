@@ -1579,7 +1579,7 @@ static int send_dc_quest_list(login_client_t *c,
     pkt->hdr.pkt_type = DL_QUEST_LIST_TYPE;
 
     for(i = 0; i < l->quest_count; ++i) {
-        if(!(l->quests[i].versions & ver)) {
+        if(!(l->quests[i]->versions & ver)) {
             continue;
         }
 
@@ -1593,13 +1593,13 @@ static int send_dc_quest_list(login_client_t *c,
         /* Convert the name and the description to the right encoding. */
         in = 32;
         out = 32;
-        inptr = l->quests[i].name;
+        inptr = l->quests[i]->name;
         outptr = (char *)pkt->entries[entries].name;
         iconv(ic, &inptr, &in, &outptr, &out);
 
         in = 112;
         out = 112;
-        inptr = l->quests[i].desc;
+        inptr = l->quests[i]->desc;
         outptr = (char *)pkt->entries[entries].desc;
         iconv(ic, &inptr, &in, &outptr, &out);
 
@@ -1651,13 +1651,13 @@ static int send_pc_quest_list(login_client_t *c,
         /* Convert the name and the description to UTF-16. */
         in = 32;
         out = 64;
-        inptr = l->quests[i].name;
+        inptr = l->quests[i]->name;
         outptr = (char *)pkt->entries[entries].name;
         iconv(ic, &inptr, &in, &outptr, &out);
 
         in = 112;
         out = 224;
-        inptr = l->quests[i].desc;
+        inptr = l->quests[i]->desc;
         outptr = (char *)pkt->entries[entries].desc;
         iconv(ic, &inptr, &in, &outptr, &out);
 
@@ -1715,13 +1715,13 @@ static int send_gc_quest_list(login_client_t *c,
         /* Convert the name and the description to the right encoding. */
         in = 32;
         out = 32;
-        inptr = l->quests[i].name;
+        inptr = l->quests[i]->name;
         outptr = (char *)pkt->entries[entries].name;
         iconv(ic, &inptr, &in, &outptr, &out);
 
         in = 112;
         out = 112;
-        inptr = l->quests[i].desc;
+        inptr = l->quests[i]->desc;
         outptr = (char *)pkt->entries[entries].desc;
         iconv(ic, &inptr, &in, &outptr, &out);
 

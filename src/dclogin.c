@@ -1159,7 +1159,7 @@ static int handle_ship_select(login_client_t *c, dc_select_pkt *pkt) {
         case MENU_ID_QUEST:
             /* Make sure the item is valid */
             if(item_id < l->cats[0].quest_count) {
-                rv = send_quest(c, &l->cats[0].quests[item_id]);
+                rv = send_quest(c, l->cats[0].quests[item_id]);
 
                 if(c->type == CLIENT_TYPE_PC) {
                     rv |= send_initial_menu(c);
@@ -1394,7 +1394,7 @@ static int handle_info_req(login_client_t *c, dc_select_pkt *pkt) {
 
             /* Make sure the item is valid */
             if(item_id < l->cats[0].quest_count)
-                return send_quest_description(c, &l->cats[0].quests[item_id]);
+                return send_quest_description(c, l->cats[0].quests[item_id]);
             else
                 return -1;
 
