@@ -1,6 +1,6 @@
 /*
     Sylverant Login Server
-    Copyright (C) 2009, 2010, 2011, 2012, 2013, 2018 Lawrence Sebald
+    Copyright (C) 2009, 2010, 2011, 2012, 2013, 2018, 2020 Lawrence Sebald
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License version 3
@@ -92,6 +92,7 @@ login_client_t *create_connection(int sock, int type, struct sockaddr *ip,
             /* Fall through... */
 
         case CLIENT_TYPE_EP3:
+        case CLIENT_TYPE_XBOX:
             /* Generate the encryption keys for the client and server. */
             rv->client_key = client_seed_dc = genrand_int32();
             rv->server_key = server_seed_dc = genrand_int32();
@@ -271,6 +272,7 @@ int read_from_client(login_client_t *c) {
             case CLIENT_TYPE_DC:
             case CLIENT_TYPE_GC:
             case CLIENT_TYPE_EP3:
+            case CLIENT_TYPE_XBOX:
                 pkt_sz = LE16(tmp_hdr.dc.pkt_len);
                 break;
 
@@ -340,6 +342,7 @@ process:
         case CLIENT_TYPE_PC:
         case CLIENT_TYPE_GC:
         case CLIENT_TYPE_EP3:
+        case CLIENT_TYPE_XBOX:
             rv = process_dclogin_packet(c, c->recvbuf);
             break;
 

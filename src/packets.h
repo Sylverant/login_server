@@ -185,6 +185,21 @@ typedef struct gc_login_9c {
     uint8_t padding6[32];
 } gc_login_9c_pkt;
 
+typedef struct xb_login_9c {
+    dc_pkt_hdr_t hdr;
+    uint8_t padding1[8];
+    uint8_t version;
+    uint8_t padding2[4];
+    uint8_t language_code;
+    uint8_t padding3[2];
+    uint8_t xbl_gamertag[16];
+    uint8_t padding4[32];
+    uint8_t xbl_userid[16];
+    uint8_t padding5[32];
+    uint8_t xbox_pso[8];        /* Literally "xbox-pso" */
+    uint8_t padding6[40];
+} xb_login_9c_pkt;
+
 typedef struct dcv2_login_9d {
     union {
         dc_pkt_hdr_t dc;

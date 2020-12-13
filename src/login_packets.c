@@ -126,7 +126,8 @@ int send_dc_welcome(login_client_t *c, uint32_t svect, uint32_t cvect) {
 
     /* Fill in the header */
     if(c->type == CLIENT_TYPE_DC || c->type == CLIENT_TYPE_GC ||
-       c->type == CLIENT_TYPE_EP3 || c->type == CLIENT_TYPE_DCNTE) {
+       c->type == CLIENT_TYPE_EP3 || c->type == CLIENT_TYPE_DCNTE ||
+       c->type == CLIENT_TYPE_XBOX) {
         pkt->hdr.dc.pkt_len = LE16(DC_WELCOME_LENGTH);
         pkt->hdr.dc.pkt_type = LOGIN_WELCOME_TYPE;
     }
@@ -178,7 +179,8 @@ static int send_large_msg_dc(login_client_t *c, const char msg[]) {
     char *outptr;
 
     if(c->type == CLIENT_TYPE_DC || c->type == CLIENT_TYPE_GC ||
-       c->type == CLIENT_TYPE_EP3 || c->type == CLIENT_TYPE_DCNTE) {
+       c->type == CLIENT_TYPE_EP3 || c->type == CLIENT_TYPE_DCNTE ||
+       c->type == CLIENT_TYPE_XBOX) {
         if(msg[1] == 'J') {
             ic = iconv_open("SHIFT_JIS", "UTF-8");
         }
@@ -213,7 +215,8 @@ static int send_large_msg_dc(login_client_t *c, const char msg[]) {
 
     /* Fill in the header */
     if(c->type == CLIENT_TYPE_DC || c->type == CLIENT_TYPE_GC ||
-       c->type == CLIENT_TYPE_DCNTE) {
+       c->type == CLIENT_TYPE_EP3 || c->type == CLIENT_TYPE_DCNTE ||
+       c->type == CLIENT_TYPE_XBOX) {
         pkt->hdr.dc.pkt_type = MSG_BOX_TYPE;
         pkt->hdr.dc.flags = 0;
         pkt->hdr.dc.pkt_len = LE16(size);
@@ -276,6 +279,7 @@ int send_large_msg(login_client_t *c, const char msg[]) {
         case CLIENT_TYPE_GC:
         case CLIENT_TYPE_PC:
         case CLIENT_TYPE_EP3:
+        case CLIENT_TYPE_XBOX:
             return send_large_msg_dc(c, msg);
 
         case CLIENT_TYPE_BB_LOGIN:
@@ -296,7 +300,8 @@ int send_dc_security(login_client_t *c, uint32_t gc, const void *data,
 
     /* Fill in the header */
     if(c->type == CLIENT_TYPE_DC || c->type == CLIENT_TYPE_GC ||
-       c->type == CLIENT_TYPE_EP3 || c->type == CLIENT_TYPE_DCNTE) {
+       c->type == CLIENT_TYPE_EP3 || c->type == CLIENT_TYPE_DCNTE ||
+       c->type == CLIENT_TYPE_XBOX) {
         pkt->hdr.dc.pkt_type = SECURITY_TYPE;
         pkt->hdr.dc.pkt_len = LE16((0x0C + data_len));
     }
@@ -376,7 +381,8 @@ static int send_redirect_dc(login_client_t *c, in_addr_t ip, uint16_t port) {
 
     /* Fill in the header */
     if(c->type == CLIENT_TYPE_DC || c->type == CLIENT_TYPE_GC ||
-       c->type == CLIENT_TYPE_EP3 || c->type == CLIENT_TYPE_DCNTE) {
+       c->type == CLIENT_TYPE_EP3 || c->type == CLIENT_TYPE_DCNTE ||
+       c->type == CLIENT_TYPE_XBOX) {
         pkt->hdr.dc.pkt_type = REDIRECT_TYPE;
         pkt->hdr.dc.pkt_len = LE16(DC_REDIRECT_LENGTH);
     }
@@ -401,6 +407,7 @@ int send_redirect(login_client_t *c, in_addr_t ip, uint16_t port) {
         case CLIENT_TYPE_PC:
         case CLIENT_TYPE_GC:
         case CLIENT_TYPE_EP3:
+        case CLIENT_TYPE_XBOX:
             return send_redirect_dc(c, ip, port);
 
         case CLIENT_TYPE_BB_LOGIN:
@@ -422,7 +429,8 @@ static int send_redirect6_dc(login_client_t *c, const uint8_t ip[16],
 
     /* Fill in the header */
     if(c->type == CLIENT_TYPE_DC || c->type == CLIENT_TYPE_GC ||
-       c->type == CLIENT_TYPE_EP3 || c->type == CLIENT_TYPE_DCNTE) {
+       c->type == CLIENT_TYPE_EP3 || c->type == CLIENT_TYPE_DCNTE ||
+       c->type == CLIENT_TYPE_XBOX) {
         pkt->hdr.dc.pkt_type = REDIRECT_TYPE;
         pkt->hdr.dc.pkt_len = LE16(DC_REDIRECT6_LENGTH);
         pkt->hdr.dc.flags = 6;
@@ -449,6 +457,7 @@ int send_redirect6(login_client_t *c, const uint8_t ip[16], uint16_t port) {
         case CLIENT_TYPE_PC:
         case CLIENT_TYPE_GC:
         case CLIENT_TYPE_EP3:
+        case CLIENT_TYPE_XBOX:
             return send_redirect6_dc(c, ip, port);
     }
 
@@ -506,7 +515,8 @@ static int send_timestamp_dc(login_client_t *c) {
 
     /* Fill in the header */
     if(c->type == CLIENT_TYPE_DC || c->type == CLIENT_TYPE_GC ||
-       c->type == CLIENT_TYPE_EP3 || c->type == CLIENT_TYPE_DCNTE) {
+       c->type == CLIENT_TYPE_EP3 || c->type == CLIENT_TYPE_DCNTE ||
+       c->type == CLIENT_TYPE_XBOX) {
         pkt->hdr.dc.pkt_type = TIMESTAMP_TYPE;
         pkt->hdr.dc.pkt_len = LE16(DC_TIMESTAMP_LENGTH);
     }
@@ -567,6 +577,7 @@ int send_timestamp(login_client_t *c) {
         case CLIENT_TYPE_PC:
         case CLIENT_TYPE_GC:
         case CLIENT_TYPE_EP3:
+        case CLIENT_TYPE_XBOX:
             return send_timestamp_dc(c);
 
         case CLIENT_TYPE_BB_CHARACTER:
@@ -755,6 +766,7 @@ int send_initial_menu(login_client_t *c) {
 
         case CLIENT_TYPE_GC:
         case CLIENT_TYPE_EP3:
+        case CLIENT_TYPE_XBOX:
             return send_initial_menu_gc(c);
     }
 
@@ -805,6 +817,9 @@ static int send_ship_list_dc(login_client_t *c, uint16_t menu_code) {
     }
     else if(c->type == CLIENT_TYPE_DCNTE) {
         flags = 0x400;
+    }
+    else if(c->type == CLIENT_TYPE_XBOX) {
+        flags = 0x800;
     }
     else {
         if(c->version == SYLVERANT_QUEST_V1) {
@@ -1361,6 +1376,7 @@ int send_ship_list(login_client_t *c, uint16_t menu_code) {
         case CLIENT_TYPE_DC:
         case CLIENT_TYPE_GC:
         case CLIENT_TYPE_EP3:
+        case CLIENT_TYPE_XBOX:
             return send_ship_list_dc(c, menu_code);
 
         case CLIENT_TYPE_PC:
@@ -1381,7 +1397,8 @@ static int send_info_reply_dc(login_client_t *c, const char msg[]) {
     char *outptr;
 
     if(c->type == CLIENT_TYPE_DC || c->type == CLIENT_TYPE_GC ||
-       c->type == CLIENT_TYPE_EP3 || c->type == CLIENT_TYPE_DCNTE) {
+       c->type == CLIENT_TYPE_EP3 || c->type == CLIENT_TYPE_DCNTE ||
+       c->type == CLIENT_TYPE_XBOX) {
         if(msg[1] == 'J') {
             ic = iconv_open("SHIFT_JIS", "UTF-8");
         }
@@ -1420,7 +1437,8 @@ static int send_info_reply_dc(login_client_t *c, const char msg[]) {
 
     /* Fill in the header */
     if(c->type == CLIENT_TYPE_DC || c->type == CLIENT_TYPE_GC ||
-       c->type == CLIENT_TYPE_EP3 || c->type == CLIENT_TYPE_DCNTE) {
+       c->type == CLIENT_TYPE_EP3 || c->type == CLIENT_TYPE_DCNTE ||
+       c->type == CLIENT_TYPE_XBOX) {
         pkt->hdr.dc.pkt_type = INFO_REPLY_TYPE;
         pkt->hdr.dc.flags = 0;
         pkt->hdr.dc.pkt_len = LE16(out);
@@ -1486,6 +1504,7 @@ int send_info_reply(login_client_t *c, const char msg[]) {
         case CLIENT_TYPE_PC:
         case CLIENT_TYPE_GC:
         case CLIENT_TYPE_EP3:
+        case CLIENT_TYPE_XBOX:
             return send_info_reply_dc(c, msg);
 
         case CLIENT_TYPE_BB_CHARACTER:
@@ -1539,6 +1558,7 @@ int send_simple(login_client_t *c, int type, int flags) {
         case CLIENT_TYPE_DC:
         case CLIENT_TYPE_GC:
         case CLIENT_TYPE_EP3:
+        case CLIENT_TYPE_XBOX:
             return send_simple_dc(c, type, flags);
 
         case CLIENT_TYPE_PC:
@@ -1751,6 +1771,10 @@ int send_quest_list(login_client_t *c, sylverant_quest_category_t *l) {
         case CLIENT_TYPE_GC:
         case CLIENT_TYPE_EP3:
             return send_gc_quest_list(c, l);
+
+        case CLIENT_TYPE_XBOX:
+            /* XXXX */
+            return -1;
     }
 
     return -1;
@@ -2081,6 +2105,9 @@ int send_info_list(login_client_t *c) {
 
         case CLIENT_TYPE_EP3:
             return send_gc_info_list(c, SYLVERANT_INFO_EP3);
+
+        case CLIENT_TYPE_XBOX:
+            return send_gc_info_list(c, SYLVERANT_INFO_XBOX);
     }
 
     return -1;
@@ -2132,6 +2159,7 @@ int send_message_box(login_client_t *c, const char *fmt, ...) {
     switch(c->type) {
         case CLIENT_TYPE_GC:
         case CLIENT_TYPE_EP3:
+        case CLIENT_TYPE_XBOX:
             rv = send_gc_message_box(c, fmt, args);
     }
 
@@ -2301,6 +2329,7 @@ int send_gm_menu(login_client_t *c) {
         case CLIENT_TYPE_DC:
         case CLIENT_TYPE_GC:
         case CLIENT_TYPE_EP3:
+        case CLIENT_TYPE_XBOX:
             return send_gm_menu_dc(c);
 
         case CLIENT_TYPE_PC:
@@ -2326,6 +2355,10 @@ int send_motd(login_client_t *c) {
 
         case CLIENT_TYPE_EP3:
             ver = SYLVERANT_INFO_EP3;
+            break;
+
+        case CLIENT_TYPE_XBOX:
+            ver = SYLVERANT_INFO_XBOX;
             break;
 
         case CLIENT_TYPE_BB_LOGIN:
@@ -2390,7 +2423,8 @@ int send_quest_description(login_client_t *c, sylverant_quest_t *q) {
         return 0;
 
     if(c->type == CLIENT_TYPE_DC || c->type == CLIENT_TYPE_GC ||
-       c->type == CLIENT_TYPE_EP3 || c->type == CLIENT_TYPE_DCNTE) {
+       c->type == CLIENT_TYPE_EP3 || c->type == CLIENT_TYPE_DCNTE ||
+       c->type == CLIENT_TYPE_XBOX) {
         if(c->language_code == CLIENT_LANG_JAPANESE)
             ic = iconv_open("SHIFT_JIS", "UTF-8");
         else
@@ -2423,7 +2457,8 @@ int send_quest_description(login_client_t *c, sylverant_quest_t *q) {
 
     /* Fill in the header */
     if(c->type == CLIENT_TYPE_DC || c->type == CLIENT_TYPE_GC ||
-       c->type == CLIENT_TYPE_DCNTE) {
+       c->type == CLIENT_TYPE_EP3 || c->type == CLIENT_TYPE_DCNTE ||
+       c->type == CLIENT_TYPE_XBOX) {
         pkt->hdr.dc.pkt_type = DL_QUEST_INFO_TYPE;
         pkt->hdr.dc.flags = 0;
         pkt->hdr.dc.pkt_len = LE16(size);

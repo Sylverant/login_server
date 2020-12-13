@@ -75,6 +75,7 @@ int pidfile_fileno(struct pidfh *pfh);
 #define NUM_EP3SOCKS 4
 #define NUM_WEBSOCKS 1
 #define NUM_BBSOCKS  2
+#define NUM_XBSOCKS  1
 #else
 #define NUM_DCSOCKS  6
 #define NUM_PCSOCKS  2
@@ -82,6 +83,7 @@ int pidfile_fileno(struct pidfh *pfh);
 #define NUM_EP3SOCKS 8
 #define NUM_WEBSOCKS 2
 #define NUM_BBSOCKS  4
+#define NUM_XBSOCKS  2
 #endif
 
 static const int dcports[NUM_DCSOCKS][2] = {
@@ -137,6 +139,13 @@ static const int bbports[NUM_BBSOCKS][2] = {
 #ifdef ENABLE_IPV6
     { AF_INET6, 12000 },
     { AF_INET6, 12001 }
+#endif
+};
+
+static const int xbports[NUM_XBSOCKS][2] = {
+    { AF_INET , 9500 },
+#ifdef ENABLE_IPV6
+    { AF_INET6, 9500 }
 #endif
 };
 
@@ -473,7 +482,8 @@ static const void *my_ntop(struct sockaddr_storage *addr,
 
 static void run_server(int dcsocks[NUM_DCSOCKS], int pcsocks[NUM_PCSOCKS],
                        int gcsocks[NUM_GCSOCKS], int websocks[NUM_WEBSOCKS],
-                       int ep3socks[NUM_EP3SOCKS], int bbsocks[NUM_BBSOCKS]) {
+                       int ep3socks[NUM_EP3SOCKS], int bbsocks[NUM_BBSOCKS],
+                       int xbsocks[NUM_XBSOCKS]) {
     fd_set readfds, writefds;
     struct timeval timeout;
     socklen_t len;
@@ -538,6 +548,11 @@ static void run_server(int dcsocks[NUM_DCSOCKS], int pcsocks[NUM_PCSOCKS],
         for(j = 0; j < NUM_BBSOCKS; ++j) {
             FD_SET(bbsocks[j], &readfds);
             nfds = nfds > bbsocks[j] ? nfds : bbsocks[j];
+        }
+
+        for(j = 0; j < NUM_XBSOCKS; ++j) {
+            FD_SET(xbsocks[j], &readfds);
+            nfds = nfds > xbsocks[j] ? nfds : xbsocks[j];
         }
 
         for(j = 0; j < NUM_WEBSOCKS; ++j) {
@@ -656,6 +671,28 @@ static void run_server(int dcsocks[NUM_DCSOCKS], int pcsocks[NUM_PCSOCKS],
 
                     if(!create_connection(asock, type, addr_p, len,
                                           bbports[j][1])) {
+                        close(asock);
+                    }
+                    else {
+                        ++client_count;
+                    }
+                }
+            }
+
+            for(j = 0; j < NUM_XBSOCKS; ++j) {
+                if(FD_ISSET(xbsocks[j], &readfds)) {
+                    len = sizeof(struct sockaddr_storage);
+
+                    if((asock = accept(xbsocks[j], addr_p, &len)) < 0) {
+                        perror("accept");
+                    }
+
+                    my_ntop(&addr, ipstr);
+                    debug(DBG_LOG, "Accepted Xbox connection from %s "
+                          "on port %d\n", ipstr, xbports[j][1]);
+
+                    if(!create_connection(asock, CLIENT_TYPE_XBOX, addr_p,
+                                          len, xbports[j][1])) {
                         close(asock);
                     }
                     else {
@@ -1004,6 +1041,7 @@ int main(int argc, char *argv[]) {
     int gcsocks[NUM_GCSOCKS];
     int ep3socks[NUM_EP3SOCKS];
     int bbsocks[NUM_BBSOCKS];
+    int xbsocks[NUM_XBSOCKS];
     int websocks[NUM_WEBSOCKS];
     char *initial_path;
     long size;
@@ -1134,6 +1172,17 @@ restart:
         }
     }
 
+    debug(DBG_LOG, "Opening Xbox ports for connections.\n");
+
+    for(i = 0; i < NUM_XBSOCKS; ++i) {
+        xbsocks[i] = open_sock(xbports[i][0], xbports[i][1]);
+
+        if(xbsocks[i] < 0) {
+            sylverant_db_close(&conn);
+            exit(EXIT_FAILURE);
+        }
+    }
+
     debug(DBG_LOG, "Opening Web access ports for connections.\n");
 
     for(i = 0; i < NUM_WEBSOCKS; ++i) {
@@ -1146,7 +1195,7 @@ restart:
     }
 
     /* Run the login server. */
-    run_server(dcsocks, pcsocks, gcsocks, websocks, ep3socks, bbsocks);
+    run_server(dcsocks, pcsocks, gcsocks, websocks, ep3socks, bbsocks, xbsocks);
 
     /* Clean up. */
     for(i = 0; i < NUM_DCSOCKS; ++i) {
@@ -1167,6 +1216,10 @@ restart:
 
     for(i = 0; i < NUM_BBSOCKS; ++i) {
         close(bbsocks[i]);
+    }
+
+    for(i = 0; i < NUM_XBSOCKS; ++i) {
+        close(xbsocks[i]);
     }
 
     for(i = 0; i < NUM_WEBSOCKS; ++i) {

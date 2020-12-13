@@ -141,6 +141,7 @@ typedef struct login_client {
 #define CLIENT_TYPE_BB_LOGIN        4
 #define CLIENT_TYPE_BB_CHARACTER    5
 #define CLIENT_TYPE_DCNTE           6
+#define CLIENT_TYPE_XBOX            7
 
 #define CLIENT_TYPE_COUNT           4   /* This doesn't include the BB types */
 
@@ -180,7 +181,7 @@ static const char type_codes[][3] __attribute__((unused)) = {
 };
 
 static const int hdr_sizes[] __attribute__((unused)) = {
-    4, 4, 4, 4, 8, 8, 4
+    4, 4, 4, 4, 8, 8, 4, 4
 };
 
 /* Language codes. */

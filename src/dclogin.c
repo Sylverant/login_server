@@ -1074,13 +1074,211 @@ static int handle_gclogine(login_client_t *c, gc_login_9e_pkt *pkt) {
         gc = (uint32_t)strtoul(row[0], NULL, 0);
         sylverant_db_result_free(result);
 
-        /* Only send the version detection packet to non-plus versions of the
-           game, as the plus versions will immediately disconnect if they
-           receive a packet 0xB2. Note that this means it is probably impossible
-           to do runtime patches for PSO Episode I&II Plus. */
+        /* Only send the version detection packet to non-plus versions of
+           the game, as the plus versions will immediately disconnect if
+           they receive a packet 0xB2. Note that this means it is probably
+           impossible to do runtime patches for PSO Episode I&II Plus. */
         v = c->ext_version & CLIENT_EXTVER_GC_EP_MASK;
         if(c->type == CLIENT_TYPE_GC && v != CLIENT_EXTVER_GC_EP12PLUS)
             send_gc_version_detect(c);
+
+        c->guildcard = gc;
+        return send_dc_security(c, gc, NULL, 0);
+    }
+
+    sylverant_db_result_free(result);
+
+    /* If we get here, we didn't find them, bail out. */
+    return -1;
+}
+
+/* The next few functions look the same pretty much... All added for xbox
+   support. */
+static int handle_xbhlcheck(login_client_t *c, xb_hlcheck_pkt *pkt) {
+    uint32_t account, gc;
+    char query[256], xbluid[32];
+    void *result;
+    char **row;
+    time_t banlen;
+    int banned = is_ip_banned(c, &banlen, query);
+
+    c->ext_version = CLIENT_EXTVER_GC | CLIENT_EXTVER_GC_EP12;
+
+    /* Save the raw version code in the extended version field too... */
+    c->ext_version |= (pkt->version << 8);
+
+    /* Make sure the user isn't IP banned. */
+    if(banned == -1) {
+        return send_simple(c, LOGIN_9A_TYPE, LOGIN_DB_CONN_ERROR);
+    }
+    else if(banned) {
+        send_ban_msg(c, banlen, query);
+        return send_simple(c, LOGIN_9A_TYPE, LOGIN_DB_SUSPENDED);
+    }
+
+    /* Escape all the important strings. */
+    sylverant_db_escape_str(&conn, xbluid, pkt->xbl_userid, 16);
+
+    sprintf(query, "SELECT guildcard FROM xbox_clients WHERE "
+            "xbl_userid='%s'", xbluid);
+
+    /* If we can't query the database, fail. */
+    if(sylverant_db_query(&conn, query)) {
+        return send_simple(c, LOGIN_9A_TYPE, LOGIN_DB_CONN_ERROR);
+    }
+
+    result = sylverant_db_result_store(&conn);
+
+    /* Did we find them? */
+    if((row = sylverant_db_result_fetch(result))) {
+        gc = (uint32_t)strtoul(row[0], NULL, 0);
+        sylverant_db_result_free(result);
+
+        /* Make sure the guildcard isn't banned. */
+        banned = is_gc_banned(gc, &banlen, query);
+
+        if(banned == -1) {
+            return send_simple(c, LOGIN_9A_TYPE, LOGIN_DB_CONN_ERROR);
+        }
+        else if(banned) {
+            send_ban_msg(c, banlen, query);
+            return send_simple(c, LOGIN_9A_TYPE, LOGIN_DB_SUSPENDED);
+        }
+
+        /* Make sure the guildcard isn't online already. */
+        banned = is_gc_online(gc);
+
+        if(banned == -1) {
+            return send_simple(c, LOGIN_9A_TYPE, LOGIN_DB_CONN_ERROR);
+        }
+        else if(banned) {
+            send_large_msg(c, __(c, "\tEYour guildcard is already online."));
+            return -1;
+        }
+
+        /* The client has at least registered, check if they are a GM. */
+        sprintf(query, "SELECT account_id FROM guildcards WHERE guildcard='%u'",
+                gc);
+
+        if(sylverant_db_query(&conn, query)) {
+            return send_simple(c, LOGIN_9A_TYPE, LOGIN_DB_CONN_ERROR);
+        }
+
+        result = sylverant_db_result_store(&conn);
+
+        if(!(row = sylverant_db_result_fetch(result))) {
+            return send_simple(c, LOGIN_9A_TYPE, LOGIN_DB_CONN_ERROR);
+        }
+
+        account = (uint32_t)strtoul(row[0], NULL, 0);
+        sylverant_db_result_free(result);
+
+        sprintf(query, "SELECT privlevel FROM account_data WHERE "
+                "account_id='%u'", account);
+
+        /* If we can't query the DB, fail. */
+        if(sylverant_db_query(&conn, query)) {
+            return send_simple(c, LOGIN_9A_TYPE, LOGIN_DB_CONN_ERROR);
+        }
+
+        result = sylverant_db_result_store(&conn);
+
+        if((row = sylverant_db_result_fetch(result))) {
+            c->priv = strtoul(row[0], NULL, 0);
+            return send_simple(c, LOGIN_9A_TYPE, LOGIN_DB_OK);
+        }
+    }
+    else {
+        /* They aren't registered yet, so... Let's solve that. */
+        sylverant_db_result_free(result);
+
+        return send_simple(c, LOGIN_9A_TYPE, LOGIN_DB_NEW_USER);
+    }
+}
+
+static int handle_xbloginc(login_client_t *c, xb_login_9c_pkt *pkt) {
+    uint32_t account, gc;
+    char query[256], xbluid[32], xblgt[32];
+    void *result;
+    char **row;
+    unsigned char hash[16];
+    int i;
+
+    /* Escape all the important strings. */
+    sylverant_db_escape_str(&conn, xbluid, pkt->xbl_userid, 16);
+
+    sprintf(query, "SELECT guildcard FROM xbox_clients WHERE "
+            "xbl_userid='%s'", xbluid);
+
+    /* If we can't query the database, fail. */
+    if(sylverant_db_query(&conn, query)) {
+        return -1;
+    }
+
+    result = sylverant_db_result_store(&conn);
+
+    if((row = sylverant_db_result_fetch(result))) {
+        /* The client registered, so we really shouldn't be here... */
+        sylverant_db_result_free(result);
+        return send_simple(c, LOGIN_9C_TYPE, LOGIN_9CGC_OK);
+    }
+    else {
+        sylverant_db_result_free(result);
+        sylverant_db_escape_str(&conn, xblgt, pkt->xbl_gamertag, 16);
+
+        /* Assign a nice fresh new guildcard number to the client. */
+        sprintf(query, "INSERT INTO guildcards (account_id) VALUES (NULL)");
+
+        if(sylverant_db_query(&conn, query)) {
+            send_large_msg(c, __(c, "\tEInternal Server Error.\n"
+                                 "Please try again later."));
+            return -1;
+        }
+
+        /* Grab the new guildcard for the user. */
+        gc = (uint32_t)sylverant_db_insert_id(&conn);
+
+        /* Add the client into our database. */
+        sprintf(query, "INSERT INTO xbox_clients (guildcard, xbl_userid,"
+                "xbl_gamertag) VALUES ('%u', '%s', '%s')", gc, xbluid, xblgt);
+
+        if(sylverant_db_query(&conn, query)) {
+            send_large_msg(c, __(c, "\tEInternal Server Error.\n"
+                                 "Please try again later."));
+            return -1;
+        }
+
+        /* Get them to send us a 9E next. */
+        return send_simple(c, LOGIN_9C_TYPE, LOGIN_9CGC_OK);
+    }
+}
+
+static int handle_xblogine(login_client_t *c, xb_login_9e_pkt *pkt) {
+    uint32_t gc, v;
+    char query[256], xbluid[32];
+    void *result;
+    char **row;
+
+    c->language_code = pkt->language_code;
+
+    /* Escape all the important strings. */
+    sylverant_db_escape_str(&conn, xbluid, pkt->xbl_userid, 16);
+
+    sprintf(query, "SELECT guildcard FROM xbox_clients WHERE "
+            "xbl_userid='%s'", xbluid);
+
+    /* If we can't query the database, fail. */
+    if(sylverant_db_query(&conn, query)) {
+        return -1;
+    }
+
+    result = sylverant_db_result_store(&conn);
+
+    /* Did we find them? */
+    if((row = sylverant_db_result_fetch(result))) {
+        /* Grab the client's guildcard number. */
+        gc = (uint32_t)strtoul(row[0], NULL, 0);
+        sylverant_db_result_free(result);
 
         c->guildcard = gc;
         return send_dc_security(c, gc, NULL, 0);
@@ -1303,6 +1501,10 @@ static int handle_char_data(login_client_t *c, dc_char_data_pkt *pkt) {
             v = ITEM_VERSION_GC;
             break;
 
+        case CLIENT_TYPE_XBOX:
+            v = ITEM_VERSION_XBOX;
+            break;
+
         default:
             return -1;
     }
@@ -1442,7 +1644,8 @@ int process_dclogin_packet(login_client_t *c, void *pkt) {
     int tmp;
 
     if(c->type == CLIENT_TYPE_DC || c->type == CLIENT_TYPE_GC ||
-       c->type == CLIENT_TYPE_EP3 || c->type == CLIENT_TYPE_DCNTE) {
+       c->type == CLIENT_TYPE_EP3 || c->type == CLIENT_TYPE_DCNTE ||
+       c->type == CLIENT_TYPE_XBOX) {
         type = dc->pkt_type;
         len = LE16(dc->pkt_len);
     }
@@ -1535,15 +1738,24 @@ int process_dclogin_packet(login_client_t *c, void *pkt) {
 
         case GC_VERIFY_LICENSE_TYPE:
             /* XXXX: Why in the world do they duplicate so much data here? */
-            return handle_gchlcheck(c, (gc_hlcheck_pkt *)pkt);
+            if(c->type != CLIENT_TYPE_XBOX)
+                return handle_gchlcheck(c, (gc_hlcheck_pkt *)pkt);
+            else
+                return handle_xbhlcheck(c, (xb_hlcheck_pkt *)pkt);
 
         case LOGIN_9C_TYPE:
             /* XXXX: Yep... check things here too. */
-            return handle_gcloginc(c, (gc_login_9c_pkt *)pkt);
+            if(c->type != CLIENT_TYPE_XBOX)
+                return handle_gcloginc(c, (gc_login_9c_pkt *)pkt);
+            else
+                return handle_xbloginc(c, (xb_login_9c_pkt *)pkt);
 
         case LOGIN_9E_TYPE:
             /* XXXX: One final check, and give them their guildcard. */
-            return handle_gclogine(c, (gc_login_9e_pkt *)pkt);
+            if(c->type != CLIENT_TYPE_XBOX)
+                return handle_gclogine(c, (gc_login_9e_pkt *)pkt);
+            else
+                return handle_xblogine(c, (xb_login_9e_pkt *)pkt);
 
         case LOGIN_9D_TYPE:
             /* XXXX: All this work for a language and version code... */
