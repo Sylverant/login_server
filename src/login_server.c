@@ -765,6 +765,17 @@ static void run_server(int dcsocks[NUM_DCSOCKS], int pcsocks[NUM_PCSOCKS],
             tmp = TAILQ_NEXT(i, qentry);
 
             if(i->disconnected) {
+                my_ntop(&i->ip_addr, ipstr);
+
+                if(!i->guildcard) {
+                    debug(DBG_LOG, "Disconnecting unidentified client (%s)\n",
+                          ipstr);
+                }
+                else {
+                    debug(DBG_LOG, "Disconnecting guild card %" PRIu32
+                          " (%s)\n", i->guildcard, ipstr);
+                }
+
                 destroy_connection(i);
             }
 

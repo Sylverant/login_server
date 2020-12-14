@@ -353,6 +353,10 @@ process:
         case CLIENT_TYPE_BB_CHARACTER:
             rv = process_bbcharacter_packet(c, c->recvbuf);
             break;
+
+        default:
+            /* This should never happen... */
+            rv = -1;
     }
 
     free(c->recvbuf);
