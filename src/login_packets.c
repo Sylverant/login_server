@@ -610,14 +610,14 @@ static int send_initial_menu_dc(login_client_t *c) {
     pkt->entries[1].flags = LE16(0x0004);
     strcpy(pkt->entries[1].name, "Ship Select");
 
-    /* Fill in the "Download" entry */
+    /* Fill in the "Download Quest" entry */
     pkt->entries[2].menu_id = LE32(MENU_ID_INITIAL);
     pkt->entries[2].item_id = LE32(ITEM_ID_INIT_DOWNLOAD);
     pkt->entries[2].flags = LE16(0x0F04);
     strcpy(pkt->entries[2].name, "Download Quest");
 
     /* Fill in the runtime patching entry, if they're available. */
-    if(v != CLIENT_EXTVER_DCV1  && v != CLIENT_EXTVER_GC_TRIAL &&
+    if(v != CLIENT_EXTVER_DCV1 && v != CLIENT_EXTVER_GC_TRIAL &&
        patches_v2) {
         pkt->entries[count + 1].menu_id = LE32(MENU_ID_INITIAL);
         pkt->entries[count + 1].item_id = LE32(ITEM_ID_INIT_PATCH);
@@ -665,7 +665,7 @@ static int send_initial_menu_pc(login_client_t *c) {
     pkt->entries[1].flags = LE16(0x0004);
     memcpy(pkt->entries[1].name, "S\0h\0i\0p\0 \0S\0e\0l\0e\0c\0t\0", 22);
 
-    /* Fill in the "Download" entry */
+    /* Fill in the "Download Quest" entry */
     pkt->entries[2].menu_id = LE32(MENU_ID_INITIAL);
     pkt->entries[2].item_id = LE32(ITEM_ID_INIT_DOWNLOAD);
     pkt->entries[2].flags = LE16(0x0F04);
@@ -713,7 +713,7 @@ static int send_initial_menu_gc(login_client_t *c) {
     pkt->entries[1].flags = LE16(0x0004);
     strcpy(pkt->entries[1].name, "Ship Select");
 
-    /* Fill in the "Download" entry */
+    /* Fill in the "Download Quest" entry */
     pkt->entries[2].menu_id = LE32(MENU_ID_INITIAL);
     pkt->entries[2].item_id = LE32(ITEM_ID_INIT_DOWNLOAD);
     pkt->entries[2].flags = LE16(0x0F04);
@@ -755,6 +755,51 @@ static int send_initial_menu_gc(login_client_t *c) {
     return crypt_send(c, len);
 }
 
+static int send_initial_menu_xbox(login_client_t *c) {
+    dc_ship_list_pkt *pkt = (dc_ship_list_pkt *)sendbuf;
+    int count = 3, len = 0x74;
+
+    /* Clear the base packet */
+    memset(pkt, 0, 0xAC);
+
+    /* Fill in the "DATABASE/US" entry */
+    pkt->entries[0].menu_id = LE32(MENU_ID_DATABASE);
+    pkt->entries[0].item_id = 0;
+    pkt->entries[0].flags = LE16(0x0004);
+    strcpy(pkt->entries[0].name, "DATABASE/US");
+    pkt->entries[0].name[0x11] = 0x08;
+
+    /* Fill in the "Ship Select" entry */
+    pkt->entries[1].menu_id = LE32(MENU_ID_INITIAL);
+    pkt->entries[1].item_id = LE32(ITEM_ID_INIT_SHIP);
+    pkt->entries[1].flags = LE16(0x0004);
+    strcpy(pkt->entries[1].name, "Ship Select");
+
+    /* Fill in the "Information" entry */
+    pkt->entries[3].menu_id = LE32(MENU_ID_INITIAL);
+    pkt->entries[3].item_id = LE32(ITEM_ID_INIT_INFO);
+    pkt->entries[3].flags = LE16(0x0004);
+    strcpy(pkt->entries[3].name, "Information");
+
+    /* If the user is a GM, give them a bit more... */
+    if(IS_GLOBAL_GM(c)) {
+        pkt->entries[count + 1].menu_id = LE32(MENU_ID_INITIAL);
+        pkt->entries[count + 1].item_id = LE32(ITEM_ID_INIT_GM);
+        pkt->entries[count + 1].flags = LE16(0x0004);
+        strcpy(pkt->entries[count + 1].name, "GM Operations");
+        ++count;
+        len += 0x1C;
+    }
+
+    /* Fill in some basic stuff */
+    pkt->hdr.pkt_type = BLOCK_LIST_TYPE;
+    pkt->hdr.flags = count;
+    pkt->hdr.pkt_len = LE16(len);
+
+    /* Send the packet away */
+    return crypt_send(c, len);
+}
+
 int send_initial_menu(login_client_t *c) {
     /* Call the appropriate function */
     switch(c->type) {
@@ -766,8 +811,10 @@ int send_initial_menu(login_client_t *c) {
 
         case CLIENT_TYPE_GC:
         case CLIENT_TYPE_EP3:
-        case CLIENT_TYPE_XBOX:
             return send_initial_menu_gc(c);
+
+        case CLIENT_TYPE_XBOX:
+            return send_initial_menu_xbox(c);
     }
 
     return -1;

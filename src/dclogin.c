@@ -44,6 +44,7 @@ extern sylverant_quest_list_t qlist[CLIENT_TYPE_COUNT][CLIENT_LANG_COUNT];
 extern sylverant_limits_t *limits;
 extern volatile sig_atomic_t shutting_down;
 static uint32_t next_pcnte_gc = 500;
+const void *my_ntop(struct sockaddr_storage *addr, char str[INET6_ADDRSTRLEN]);
 
 void print_packet(unsigned char *pkt, int len) {
     unsigned char *pos = pkt, *row = pkt;
@@ -126,7 +127,7 @@ static int is_ip_banned(login_client_t *c, time_t *until, char *reason) {
     sprintf(query, "SELECT enddate, reason FROM ip_bans NATURAL JOIN bans "
             "WHERE addr = '%u' AND enddate >= UNIX_TIMESTAMP() "
             "AND startdate <= UNIX_TIMESTAMP()",
-            (unsigned int)addr->sin_addr.s_addr);
+            (unsigned int)ntohl(addr->sin_addr.s_addr));
 
     /* If we can't query the database, fail. */
     if(sylverant_db_query(&conn, query)) {
@@ -227,6 +228,43 @@ static int is_gc_online(uint32_t gc) {
 
     sylverant_db_result_free(result);
     return rv;
+}
+
+static int keycheck(char serial[8], char ak[8]) {
+    uint64_t akv;
+    int i;
+
+    if(!serial[0] || !serial[1] || !serial[2] || !serial[3] ||
+       !serial[4] || !serial[5] || !serial[6] || !serial[7])
+        return -1;
+
+    if(!ak[0] || !ak[1] || !ak[2] || !ak[3] ||
+       !ak[4] || !ak[5] || !ak[6] || !ak[7])
+        return -1;
+
+    akv = (((uint64_t)ak[0]) <<  0) | (((uint64_t)ak[1]) <<  8) |
+          (((uint64_t)ak[2]) << 16) | (((uint64_t)ak[3]) << 24) |
+          (((uint64_t)ak[4]) << 32) | (((uint64_t)ak[5]) << 40) |
+          (((uint64_t)ak[6]) << 48) | (((uint64_t)ak[7]) << 56);
+
+    for(i = 0; i < 8; ++i) {
+        if(!isdigit(serial[i]) && (serial[i] < 'A' || serial[i] > 'F'))
+            return -1;
+
+        if(!isalnum(ak[i]))
+            return -1;
+    }
+
+    if(akv == 0300601403006014030060LLU || akv == 0304611423046114230461LLU ||
+       akv == 0310621443106214431062LLU || akv == 0314631463146314631463LLU ||
+       akv == 0320641503206415032064LLU || akv == 0324651523246515232465LLU ||
+       akv == 0330661543306615433066LLU || akv == 0334671563346715633467LLU ||
+       akv == 0340701603407016034070LLU || akv == 0344711623447116234471LLU ||
+       akv == 0340671543246414631061LLU || akv == 0304621463206515433470LLU ||
+       akv == 0310631503246615634071LLU)
+        return -1;
+
+    return 0;
 }
 
 /* Handle a client's login request packet. */
@@ -499,6 +537,12 @@ static int handle_login0(login_client_t *c, dc_login_90_pkt *pkt) {
         return -1;
     }
 
+    if(keycheck(pkt->serial, pkt->access_key)) {
+        send_large_msg(c, __(c, "\tECannot connect to server.\n"
+                       "Please check your settings."));
+        return -1;
+    }
+
     /* Escape all the important strings. */
     sylverant_db_escape_str(&conn, serial, pkt->serial, 8);
     sylverant_db_escape_str(&conn, access, pkt->access_key, 8);
@@ -537,6 +581,12 @@ static int handle_login3(login_client_t *c, dc_login_93_pkt *pkt) {
     time_t banlen;
 
     c->language_code = pkt->language_code;
+
+    if(keycheck(pkt->serial, pkt->access_key)) {
+        send_large_msg(c, __(c, "\tECannot connect to server.\n"
+                       "Please check your settings."));
+        return -1;
+    }
 
     /* Escape all the important strings. */
     sylverant_db_escape_str(&conn, dc_id, pkt->dc_id, 8);
@@ -665,6 +715,12 @@ static int handle_logina(login_client_t *c, dcv2_login_9a_pkt *pkt) {
     }
     else if(banned) {
         send_ban_msg(c, banlen, query);
+        return -1;
+    }
+
+    if(c->type != CLIENT_TYPE_PC && keycheck(pkt->serial, pkt->access_key)) {
+        send_large_msg(c, __(c, "\tECannot connect to server.\n"
+                       "Please check your settings."));
         return -1;
     }
 
@@ -1100,24 +1156,15 @@ static int handle_xbhlcheck(login_client_t *c, xb_hlcheck_pkt *pkt) {
     void *result;
     char **row;
     time_t banlen;
-    int banned = is_ip_banned(c, &banlen, query);
+    int banned;
 
     c->ext_version = CLIENT_EXTVER_GC | CLIENT_EXTVER_GC_EP12;
 
     /* Save the raw version code in the extended version field too... */
     c->ext_version |= (pkt->version << 8);
 
-    /* Make sure the user isn't IP banned. */
-    if(banned == -1) {
-        return send_simple(c, LOGIN_9A_TYPE, LOGIN_DB_CONN_ERROR);
-    }
-    else if(banned) {
-        send_ban_msg(c, banlen, query);
-        return send_simple(c, LOGIN_9A_TYPE, LOGIN_DB_SUSPENDED);
-    }
-
     /* Escape all the important strings. */
-    sylverant_db_escape_str(&conn, xbluid, pkt->xbl_userid, 16);
+    sylverant_db_escape_str(&conn, xbluid, (const char *)pkt->xbl_userid, 16);
 
     sprintf(query, "SELECT guildcard FROM xbox_clients WHERE "
             "xbl_userid='%s'", xbluid);
@@ -1187,6 +1234,8 @@ static int handle_xbhlcheck(login_client_t *c, xb_hlcheck_pkt *pkt) {
             c->priv = strtoul(row[0], NULL, 0);
             return send_simple(c, LOGIN_9A_TYPE, LOGIN_DB_OK);
         }
+
+        return send_simple(c, LOGIN_9A_TYPE, LOGIN_DB_CONN_ERROR);
     }
     else {
         /* They aren't registered yet, so... Let's solve that. */
@@ -1197,15 +1246,13 @@ static int handle_xbhlcheck(login_client_t *c, xb_hlcheck_pkt *pkt) {
 }
 
 static int handle_xbloginc(login_client_t *c, xb_login_9c_pkt *pkt) {
-    uint32_t account, gc;
+    uint32_t gc;
     char query[256], xbluid[32], xblgt[32];
     void *result;
     char **row;
-    unsigned char hash[16];
-    int i;
 
     /* Escape all the important strings. */
-    sylverant_db_escape_str(&conn, xbluid, pkt->xbl_userid, 16);
+    sylverant_db_escape_str(&conn, xbluid, (const char *)pkt->xbl_userid, 16);
 
     sprintf(query, "SELECT guildcard FROM xbox_clients WHERE "
             "xbl_userid='%s'", xbluid);
@@ -1224,7 +1271,8 @@ static int handle_xbloginc(login_client_t *c, xb_login_9c_pkt *pkt) {
     }
     else {
         sylverant_db_result_free(result);
-        sylverant_db_escape_str(&conn, xblgt, pkt->xbl_gamertag, 16);
+        sylverant_db_escape_str(&conn, xblgt, (const char *)pkt->xbl_gamertag,
+                                16);
 
         /* Assign a nice fresh new guildcard number to the client. */
         sprintf(query, "INSERT INTO guildcards (account_id) VALUES (NULL)");
@@ -1254,15 +1302,38 @@ static int handle_xbloginc(login_client_t *c, xb_login_9c_pkt *pkt) {
 }
 
 static int handle_xblogine(login_client_t *c, xb_login_9e_pkt *pkt) {
-    uint32_t gc, v;
+    uint32_t gc;
     char query[256], xbluid[32];
     void *result;
     char **row;
+    xbox_ip_t *ip = (xbox_ip_t *)pkt->sec_data;
+    time_t banlen;
+    int banned;
+    struct sockaddr_in *addr = (struct sockaddr_in *)&c->ip_addr;
+    char ipstr[INET6_ADDRSTRLEN];
+
+    /* Check if the user is IP banned. */
+    memset(&c->ip_addr, 0, sizeof(struct sockaddr_storage));
+    addr->sin_family = AF_INET;
+    addr->sin_addr.s_addr = ip->wan_ip;
+    addr->sin_port = ip->port;
+
+    banned = is_ip_banned(c, &banlen, query);
+
+    if(banned == -1) {
+        return send_simple(c, LOGIN_9A_TYPE, LOGIN_DB_CONN_ERROR);
+    }
+    else if(banned) {
+        send_ban_msg(c, banlen, query);
+        return send_simple(c, LOGIN_9A_TYPE, LOGIN_DB_SUSPENDED);
+    }
 
     c->language_code = pkt->language_code;
+    c->ext_version = CLIENT_EXTVER_GC | CLIENT_EXTVER_GC_EP12;
+    c->ext_version |= (pkt->version << 8);
 
     /* Escape all the important strings. */
-    sylverant_db_escape_str(&conn, xbluid, pkt->xbl_userid, 16);
+    sylverant_db_escape_str(&conn, xbluid, (const char *)pkt->xbl_userid, 16);
 
     sprintf(query, "SELECT guildcard FROM xbox_clients WHERE "
             "xbl_userid='%s'", xbluid);
@@ -1280,8 +1351,35 @@ static int handle_xblogine(login_client_t *c, xb_login_9e_pkt *pkt) {
         gc = (uint32_t)strtoul(row[0], NULL, 0);
         sylverant_db_result_free(result);
 
+        my_ntop(&c->ip_addr, ipstr);
+        debug(DBG_LOG, "Xbox Guildcard %" PRIu32 " connected from real IP %s\n",
+              gc, ipstr);
+
+        /* Make sure the guildcard isn't banned. */
+        banned = is_gc_banned(gc, &banlen, query);
+
+        if(banned == -1) {
+            return send_simple(c, LOGIN_9A_TYPE, LOGIN_DB_CONN_ERROR);
+        }
+        else if(banned) {
+            send_ban_msg(c, banlen, query);
+            return send_simple(c, LOGIN_9A_TYPE, LOGIN_DB_SUSPENDED);
+        }
+
+        /* Make sure the guildcard isn't online already. */
+        banned = is_gc_online(gc);
+
+        if(banned == -1) {
+            return send_simple(c, LOGIN_9A_TYPE, LOGIN_DB_CONN_ERROR);
+        }
+        else if(banned) {
+            send_large_msg(c, __(c, "\tEYour guildcard is already online."));
+            return -1;
+        }
+
         c->guildcard = gc;
-        return send_dc_security(c, gc, NULL, 0);
+        send_dc_security(c, gc, NULL, 0);
+        return 0;
     }
 
     sylverant_db_result_free(result);
@@ -1296,6 +1394,13 @@ static int handle_logind(login_client_t *c, dcv2_login_9d_pkt *pkt) {
        about it anymore... */
     c->language_code = pkt->language_code;
 
+    if(c->type != CLIENT_TYPE_PC && pkt->version != 0x30 &&
+       keycheck(pkt->serial, pkt->access_key)) {
+           send_large_msg(c, __(c, "\tECannot connect to server.\n"
+                          "Please check your settings."));
+           return -1;
+    }
+
     /* The Gamecube Episode I & II trial looks like it's a Dreamcast client up
        until this point. */
     if(c->type == CLIENT_TYPE_DC && pkt->version == 0x30)
@@ -1308,7 +1413,7 @@ static int handle_logind(login_client_t *c, dcv2_login_9d_pkt *pkt) {
 
 /* Handle a client's ship select packet. */
 static int handle_ship_select(login_client_t *c, dc_select_pkt *pkt) {
-    sylverant_quest_list_t *l;
+    sylverant_quest_list_t *l = NULL;
     uint32_t menu_id = LE32(pkt->menu_id);
     uint32_t item_id = LE32(pkt->item_id);
     int rv;

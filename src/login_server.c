@@ -420,6 +420,8 @@ int ship_transfer(login_client_t *c, uint32_t shipid) {
         port = (uint16_t)strtoul(row[1], NULL, 0) + c->type;
     else if(c->type == CLIENT_TYPE_DCNTE)
         port = (uint16_t)strtoul(row[1], NULL, 0);
+    else if(c->type == CLIENT_TYPE_XBOX)
+        port = (uint16_t)strtoul(row[1], NULL, 0) + 5;
     else
         port = (uint16_t)strtoul(row[1], NULL, 0) + 4;
 
@@ -459,8 +461,7 @@ int ship_transfer(login_client_t *c, uint32_t shipid) {
 #endif
 }
 
-static const void *my_ntop(struct sockaddr_storage *addr,
-                           char str[INET6_ADDRSTRLEN]) {
+const void *my_ntop(struct sockaddr_storage *addr, char str[INET6_ADDRSTRLEN]) {
     int family = addr->ss_family;
 
     switch(family) {
@@ -688,8 +689,8 @@ static void run_server(int dcsocks[NUM_DCSOCKS], int pcsocks[NUM_PCSOCKS],
                     }
 
                     my_ntop(&addr, ipstr);
-                    debug(DBG_LOG, "Accepted Xbox connection from %s "
-                          "on port %d\n", ipstr, xbports[j][1]);
+                    debug(DBG_LOG, "Accepted Xbox connection from secure "
+                          "gateway %s on port %d\n", ipstr, xbports[j][1]);
 
                     if(!create_connection(asock, CLIENT_TYPE_XBOX, addr_p,
                                           len, xbports[j][1])) {
