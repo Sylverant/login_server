@@ -757,10 +757,10 @@ static int send_initial_menu_gc(login_client_t *c) {
 
 static int send_initial_menu_xbox(login_client_t *c) {
     dc_ship_list_pkt *pkt = (dc_ship_list_pkt *)sendbuf;
-    int count = 3, len = 0x74;
+    int count = 2, len = 0x58;
 
     /* Clear the base packet */
-    memset(pkt, 0, 0xAC);
+    memset(pkt, 0, 0x74);
 
     /* Fill in the "DATABASE/US" entry */
     pkt->entries[0].menu_id = LE32(MENU_ID_DATABASE);
@@ -776,10 +776,10 @@ static int send_initial_menu_xbox(login_client_t *c) {
     strcpy(pkt->entries[1].name, "Ship Select");
 
     /* Fill in the "Information" entry */
-    pkt->entries[3].menu_id = LE32(MENU_ID_INITIAL);
-    pkt->entries[3].item_id = LE32(ITEM_ID_INIT_INFO);
-    pkt->entries[3].flags = LE16(0x0004);
-    strcpy(pkt->entries[3].name, "Information");
+    pkt->entries[2].menu_id = LE32(MENU_ID_INITIAL);
+    pkt->entries[2].item_id = LE32(ITEM_ID_INIT_INFO);
+    pkt->entries[2].flags = LE16(0x0004);
+    strcpy(pkt->entries[2].name, "Information");
 
     /* If the user is a GM, give them a bit more... */
     if(IS_GLOBAL_GM(c)) {
