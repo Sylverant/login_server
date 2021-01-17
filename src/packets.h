@@ -1,7 +1,7 @@
 /*
     Sylverant Login Server
-    Copyright (C) 2009, 2010, 2011, 2012, 2013, 2014, 2015, 2018,
-                  2020 Lawrence Sebald
+    Copyright (C) 2009, 2010, 2011, 2012, 2013, 2014, 2015, 2018, 2020,
+                  2021 Lawrence Sebald
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License version 3
@@ -984,6 +984,16 @@ typedef struct pc_quest_list {
         uint16_t desc[112];
     } entries[0];
 } PACKED pc_quest_list_pkt;
+
+typedef struct xb_quest_list {
+    dc_pkt_hdr_t hdr;
+    struct {
+        uint32_t menu_id;
+        uint32_t item_id;
+        char name[32];
+        char desc[128];
+    } entries[0];
+} PACKED xb_quest_list_pkt;
 
 typedef struct bb_quest_list {
     bb_pkt_hdr_t hdr;

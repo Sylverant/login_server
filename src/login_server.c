@@ -1,6 +1,7 @@
 /*
     Sylverant Login Server
-    Copyright (C) 2009, 2010, 2011, 2013, 2015, 2016, 2018, 2020 Lawrence Sebald
+    Copyright (C) 2009, 2010, 2011, 2013, 2015, 2016, 2018, 2020,
+                  2021 Lawrence Sebald
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License version 3
@@ -169,7 +170,7 @@ static const char *runas_user = RUNAS_DEFAULT;
 /* Print information about this program to stdout. */
 static void print_program_info() {
     printf("Sylverant Login Server version %s\n", VERSION);
-    printf("Copyright (C) 2009-2020 Lawrence Sebald\n\n");
+    printf("Copyright (C) 2009-2021 Lawrence Sebald\n\n");
     printf("This program is free software: you can redistribute it and/or\n"
            "modify it under the terms of the GNU Affero General Public\n"
            "License version 3 as published by the Free Software Foundation.\n\n"
@@ -284,6 +285,9 @@ void read_quests() {
 
     if(cfg->quests_dir && cfg->quests_dir[0]) {
         for(i = 0; i < CLIENT_TYPE_COUNT; ++i) {
+            if(type_codes[i][0] == 0)
+                continue;
+
             for(j = 0; j < CLIENT_LANG_COUNT; ++j) {
                 sprintf(fn, "%s/%s-%s/quests.xml", cfg->quests_dir,
                         type_codes[i], language_codes[j]);

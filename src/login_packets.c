@@ -1,7 +1,7 @@
 /*
     Sylverant Login Server
-    Copyright (C) 2009, 2010, 2011, 2012, 2013, 2015, 2018, 2019,
-                  2020 Lawrence Sebald
+    Copyright (C) 2009, 2010, 2011, 2012, 2013, 2015, 2018, 2019, 2020,
+                  2021 Lawrence Sebald
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License version 3
@@ -757,7 +757,7 @@ static int send_initial_menu_gc(login_client_t *c) {
 
 static int send_initial_menu_xbox(login_client_t *c) {
     dc_ship_list_pkt *pkt = (dc_ship_list_pkt *)sendbuf;
-    int count = 2, len = 0x58;
+    int count = 3, len = 0x74;
 
     /* Clear the base packet */
     memset(pkt, 0, 0x74);
@@ -775,11 +775,17 @@ static int send_initial_menu_xbox(login_client_t *c) {
     pkt->entries[1].flags = LE16(0x0004);
     strcpy(pkt->entries[1].name, "Ship Select");
 
-    /* Fill in the "Information" entry */
+    /* Fill in the "Download Quest" entry */
     pkt->entries[2].menu_id = LE32(MENU_ID_INITIAL);
-    pkt->entries[2].item_id = LE32(ITEM_ID_INIT_INFO);
-    pkt->entries[2].flags = LE16(0x0004);
-    strcpy(pkt->entries[2].name, "Information");
+    pkt->entries[2].item_id = LE32(ITEM_ID_INIT_DOWNLOAD);
+    pkt->entries[2].flags = LE16(0x0F04);
+    strcpy(pkt->entries[2].name, "Download Quest");
+
+    /* Fill in the "Information" entry */
+    pkt->entries[3].menu_id = LE32(MENU_ID_INITIAL);
+    pkt->entries[3].item_id = LE32(ITEM_ID_INIT_INFO);
+    pkt->entries[3].flags = LE16(0x0004);
+    strcpy(pkt->entries[3].name, "Information");
 
     /* If the user is a GM, give them a bit more... */
     if(IS_GLOBAL_GM(c)) {
@@ -1806,6 +1812,70 @@ static int send_gc_quest_list(login_client_t *c,
     return crypt_send(c, len);
 }
 
+static int send_xbox_quest_list(login_client_t *c,
+                                sylverant_quest_category_t *l) {
+    xb_quest_list_pkt *pkt = (xb_quest_list_pkt *)sendbuf;
+    int i, len = 0x04, entries = 0;
+    iconv_t ic;
+    size_t in, out;
+    ICONV_CONST char *inptr;
+    char *outptr;
+
+    /* Quest names are stored internally as UTF-8, convert to the appropriate
+       encoding. */
+    if(c->language_code == CLIENT_LANG_JAPANESE) {
+        ic = iconv_open("SHIFT_JIS", "UTF-8");
+    }
+    else {
+        ic = iconv_open("ISO-8859-1", "UTF-8");
+    }
+
+    if(ic == (iconv_t)-1) {
+        perror("iconv_open");
+        return -1;
+    }
+
+    /* Clear out the header */
+    memset(pkt, 0, 0x04);
+
+    /* Fill in the header */
+    pkt->hdr.pkt_type = DL_QUEST_LIST_TYPE;
+
+    for(i = 0; i < l->quest_count; ++i) {
+        /* Clear the entry */
+        memset(pkt->entries + entries, 0, 0xA8);
+
+        /* Copy the category's information over to the packet */
+        pkt->entries[entries].menu_id = LE32(0x00000004);
+        pkt->entries[entries].item_id = LE32(i);
+
+        /* Convert the name and the description to the right encoding. */
+        in = 32;
+        out = 32;
+        inptr = l->quests[i]->name;
+        outptr = (char *)pkt->entries[entries].name;
+        iconv(ic, &inptr, &in, &outptr, &out);
+
+        in = 112;
+        out = 128;
+        inptr = l->quests[i]->desc;
+        outptr = (char *)pkt->entries[entries].desc;
+        iconv(ic, &inptr, &in, &outptr, &out);
+
+        ++entries;
+        len += 0xA8;
+    }
+
+    iconv_close(ic);
+
+    /* Fill in the rest of the header */
+    pkt->hdr.flags = entries;
+    pkt->hdr.pkt_len = LE16(len);
+
+    /* Send it away */
+    return crypt_send(c, len);
+}
+
 int send_quest_list(login_client_t *c, sylverant_quest_category_t *l) {
     /* Call the appropriate function. */
     switch(c->type) {
@@ -1820,8 +1890,7 @@ int send_quest_list(login_client_t *c, sylverant_quest_category_t *l) {
             return send_gc_quest_list(c, l);
 
         case CLIENT_TYPE_XBOX:
-            /* XXXX */
-            return -1;
+            return send_xbox_quest_list(c, l);
     }
 
     return -1;
@@ -1834,9 +1903,10 @@ int send_quest(login_client_t *c, sylverant_quest_t *q) {
     FILE *fp;
     long len;
     size_t read;
+    int v = c->type;
 
     /* Figure out what file we're going to send. */
-    sprintf(filename, "%s/%s-%s/%s.qst", cfg->quests_dir, type_codes[c->type],
+    sprintf(filename, "%s/%s-%s/%s.qst", cfg->quests_dir, type_codes[v],
             language_codes[c->language_code], q->prefix);
     fp = fopen(filename, "rb");
 

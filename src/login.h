@@ -1,6 +1,7 @@
 /*
     Sylverant Login Server
-    Copyright (C) 2009, 2010, 2011, 2012, 2013, 2018, 2019, 2020 Lawrence Sebald
+    Copyright (C) 2009, 2010, 2011, 2012, 2013, 2018, 2019, 2020,
+                  2021 Lawrence Sebald
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License version 3
@@ -143,7 +144,7 @@ typedef struct login_client {
 #define CLIENT_TYPE_DCNTE           6
 #define CLIENT_TYPE_XBOX            7
 
-#define CLIENT_TYPE_COUNT           4   /* This doesn't include the BB types */
+#define CLIENT_TYPE_COUNT           8
 
 /* Extended version code bitfield values */
 #define CLIENT_EXTVER_DC            (1 << 0)
@@ -176,8 +177,8 @@ typedef struct login_client {
 #define CLIENT_EXTVER_GC_VER_MASK   (0xFF << 8)
 
 /* The list of type codes for the quest directories. */
-static const char type_codes[][3] __attribute__((unused)) = {
-    "dc", "pc", "gc", "e3"
+static const char type_codes[][5] __attribute__((unused)) = {
+    "dc", "pc", "gc", "e3", "", "", "", "xbox"
 };
 
 static const int hdr_sizes[] __attribute__((unused)) = {

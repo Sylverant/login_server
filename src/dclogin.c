@@ -1,7 +1,7 @@
 /*
     Sylverant Login Server
-    Copyright (C) 2009, 2010, 2011, 2013, 2015, 2017, 2018, 2019,
-                  2020 Lawrence Sebald
+    Copyright (C) 2009, 2010, 2011, 2013, 2015, 2017, 2018, 2019, 2020,
+                  2021 Lawrence Sebald
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License version 3
@@ -1420,7 +1420,9 @@ static int handle_ship_select(login_client_t *c, dc_select_pkt *pkt) {
     const patchset_t *p;
 
     /* Don't go out of bounds... */
-    if(c->type < CLIENT_TYPE_DCNTE)
+    if(c->type == CLIENT_TYPE_XBOX)
+        l = &qlist[CLIENT_TYPE_XBOX][c->language_code];
+    else if(c->type < CLIENT_TYPE_DCNTE)
          l = &qlist[c->type][c->language_code];
 
     switch(menu_id & 0x000000FF) {
