@@ -1015,7 +1015,7 @@ static int handle_gchlcheck(login_client_t *c, gc_hlcheck_pkt *pkt) {
     sylverant_db_result_free(result);
 
     /* If we get here, we didn't find them, bail out. */
-    return send_simple(c, LOGIN_9A_TYPE, LOGIN_DB_CONN_ERROR);
+    return send_simple(c, LOGIN_9A_TYPE, LOGIN_DB_NO_HL);
 }
 
 static int handle_gcloginc(login_client_t *c, gc_login_9c_pkt *pkt) {
