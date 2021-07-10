@@ -1253,6 +1253,9 @@ restart:
     patch_list_free(patches_v2);
     patches_v2 = NULL;
 
+    patch_list_free(patches_gc);
+    patches_gc = NULL;
+
     sylverant_free_config(cfg);
 	cleanup_i18n();
 
