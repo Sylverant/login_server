@@ -3032,3 +3032,28 @@ int send_patch_menu(login_client_t *c) {
 
     return -1;
 }
+
+static int send_crc_check_pc(login_client_t *c, uint32_t st, uint32_t count) {
+    patch_send_pkt *pkt = (patch_send_pkt *)sendbuf;
+
+    /* Fill in the request to CRC data... */
+    pkt->entry_offset = 0;
+    pkt->crc_start = LE32(st);
+    pkt->crc_length = LE32(count);
+    pkt->code_begin = 0;
+
+    /* Fill in the header. */
+    pkt->hdr.pc.pkt_type = PATCH_TYPE;
+    pkt->hdr.pc.flags = 0xfe;
+    pkt->hdr.pc.pkt_len = LE16(DC_PATCH_HEADER_LENGTH);
+
+    /* Send the packet away */
+    return crypt_send(c, DC_PATCH_HEADER_LENGTH);
+}
+
+int send_crc_check(login_client_t *c, uint32_t start, uint32_t count) {
+    switch(c->type) {
+        case CLIENT_TYPE_PC:
+            return send_crc_check_pc(c);
+    }
+}

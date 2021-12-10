@@ -1,6 +1,6 @@
 /*
     Sylverant Login Server
-    Copyright (C) 2009, 2010, 2011, 2015, 2018 Lawrence Sebald
+    Copyright (C) 2009, 2010, 2011, 2015, 2018, 2021 Lawrence Sebald
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License version 3
@@ -169,5 +169,8 @@ int send_single_patch_gc(login_client_t *c, const patchset_t *p);
 
 /* Send the menu of all available patches to the client. */
 int send_patch_menu(login_client_t *c);
+
+/* Send a request for the client to CRC some part of its memory space. */
+int send_crc_check(login_client_t *c, uint32_t start, uint32_t count);
 
 #endif /* !LOGIN_PACKETS_H */

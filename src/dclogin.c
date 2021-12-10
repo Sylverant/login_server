@@ -1733,11 +1733,21 @@ int handle_patch_return(login_client_t *c, patch_return_pkt *pkt) {
     uint32_t ver;
 
     /* See if it's one corresponding to our version check... */
-    if(pkt->hdr.dc.flags != 0xff)
-        return 0;
+    switch(c->type) {
+        case CLIENT_TYPE_DC:
+        case CLIENT_TYPE_GC:
+            if(pkt->hdr.dc.flags != 0xff)
+                return 0;
 
-    ver = LE32(pkt->retval);
-    c->det_version = ver;
+            ver = LE32(pkt->retval);
+            c->det_version = ver;
+            break;
+
+        case CLIENT_TYPE_PC:
+            if(pkt->hdr.pc.flags != 0xfe)
+                return 0;
+
+    }
 
     return 0;
 }
