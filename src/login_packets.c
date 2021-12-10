@@ -884,7 +884,7 @@ static int send_ship_list_dc(login_client_t *c, uint16_t menu_code) {
     /* Get ready to query the database */
     sprintf(query, "SELECT ship_id, name, players, gm_only, ship_number, "
             "privileges FROM online_ships WHERE menu_code='%hu' AND "
-            "(flags & 0x%02x) = 0 ORDER BY ship_number", menu_code, flags);
+            "(flags & 0x%04x) = 0 ORDER BY ship_number", menu_code, flags);
 
     /* Query the database and see what we've got */
     if(sylverant_db_query(&conn, query)) {
@@ -938,13 +938,13 @@ static int send_ship_list_dc(login_client_t *c, uint16_t menu_code) {
     /* Figure out any lists we need to allow to be seen */
     if(!IS_GLOBAL_GM(c)) {
         sprintf(query, "SELECT DISTINCT menu_code FROM online_ships WHERE "
-                "(flags & 0x%02x) = 0 AND gm_only=0 AND "
+                "(flags & 0x%04x) = 0 AND gm_only=0 AND "
                 "(privileges & 0x%08x) = privileges ORDER BY menu_code", flags,
                 c->priv);
     }
     else {
         sprintf(query, "SELECT DISTINCT menu_code FROM online_ships WHERE "
-                "(flags & 0x%02x) = 0 ORDER BY menu_code", flags);
+                "(flags & 0x%04x) = 0 ORDER BY menu_code", flags);
     }
 
     /* Query the database and see what we've got */
@@ -1126,13 +1126,13 @@ static int send_ship_list_pc(login_client_t *c, uint16_t menu_code) {
     /* Figure out any lists we need to allow to be seen */
     if(!IS_GLOBAL_GM(c)) {
         sprintf(query, "SELECT DISTINCT menu_code FROM online_ships WHERE "
-                "(flags & 0x%02x) = 0 AND gm_only=0 AND "
+                "(flags & 0x%04x) = 0 AND gm_only=0 AND "
                 "(privileges & 0x%08x) = privileges ORDER BY menu_code", flags,
                 c->priv);
     }
     else {
         sprintf(query, "SELECT DISTINCT menu_code FROM online_ships WHERE "
-                "(flags & 0x%02x) = 0 ORDER BY menu_code", flags);
+                "(flags & 0x%04x) = 0 ORDER BY menu_code", flags);
     }
 
     /* Query the database and see what we've got */
@@ -3056,6 +3056,8 @@ static int send_crc_check_pc(login_client_t *c, uint32_t st, uint32_t count) {
 int send_crc_check(login_client_t *c, uint32_t start, uint32_t count) {
     switch(c->type) {
         case CLIENT_TYPE_PC:
-            return send_crc_check_pc(c);
+            return send_crc_check_pc(c, start, count);
     }
+
+    return -1;
 }
