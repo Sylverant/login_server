@@ -850,13 +850,11 @@ static int send_ship_list_dc(login_client_t *c, uint16_t menu_code) {
     pkt->entries[0].item_id = 0;
     pkt->entries[0].flags = LE16(0x0004);
 
-    if(menu_code) {
+    if(menu_code)
         sprintf(pkt->entries[0].name, "SHIP/%c%c", (char)menu_code,
                 (char)(menu_code >> 8));
-    }
-    else {
+    else
         strcpy(pkt->entries[0].name, "SHIP/US");
-    }
 
     pkt->entries[0].name[0x11] = 0x08;
     num_ships = 1;
@@ -923,14 +921,12 @@ static int send_ship_list_dc(login_client_t *c, uint16_t menu_code) {
         pkt->entries[num_ships].flags = LE16(0x0F04);
 
         /* Create the name string */
-        if(menu_code) {
+        if(menu_code)
             sprintf(pkt->entries[num_ships].name, "%02X:%c%c/%s", ship_num,
                     (char)menu_code, (char)(menu_code >> 8), row[1]);
-        }
-        else {
+        else
             sprintf(pkt->entries[num_ships].name, "%02X:%s", ship_num,
                     row[1]);
-        }
 
         /* We're done with this ship, increment the counter */
         ++num_ships;
@@ -940,8 +936,16 @@ static int send_ship_list_dc(login_client_t *c, uint16_t menu_code) {
     sylverant_db_result_free(result);
 
     /* Figure out any lists we need to allow to be seen */
-    sprintf(query, "SELECT DISTINCT menu_code FROM online_ships ORDER BY "
-            "menu_code");
+    if(!IS_GLOBAL_GM(c)) {
+        sprintf(query, "SELECT DISTINCT menu_code FROM online_ships WHERE "
+                "(flags & 0x%02x) = 0 AND gm_only=0 AND "
+                "(privileges & 0x%08x) = privileges ORDER BY menu_code", flags,
+                c->priv);
+    }
+    else {
+        sprintf(query, "SELECT DISTINCT menu_code FROM online_ships WHERE "
+                "(flags & 0x%02x) = 0 ORDER BY menu_code", flags);
+    }
 
     /* Query the database and see what we've got */
     if(sylverant_db_query(&conn, query)) {
@@ -960,18 +964,16 @@ static int send_ship_list_dc(login_client_t *c, uint16_t menu_code) {
         ship_id = (uint16_t)strtoul(row[0], NULL, 0);
 
         /* Skip the entry we're filling in now */
-        if(ship_id == menu_code) {
+        if(ship_id == menu_code)
             continue;
-        }
 
         tmp[0] = (char)(ship_id);
         tmp[1] = (char)(ship_id >> 8);
         tmp[2] = '\0';
 
         /* Make sure the values are in-bounds */
-        if((tmp[0] || tmp[1]) && (!isalpha(tmp[0]) || !isalpha(tmp[1]))) {
+        if((tmp[0] || tmp[1]) && (!isalpha(tmp[0]) || !isalpha(tmp[1])))
             continue;
-        }
 
         /* Clear out the ship information */
         memset(&pkt->entries[num_ships], 0, 0x1C);
@@ -982,12 +984,10 @@ static int send_ship_list_dc(login_client_t *c, uint16_t menu_code) {
         pkt->entries[num_ships].flags = LE16(0x0F04);
 
         /* Create the name string */
-        if(tmp[0] && tmp[1]) {
+        if(tmp[0] && tmp[1])
             sprintf(pkt->entries[num_ships].name, "SHIP/%s", tmp);
-        }
-        else {
+        else
             strcpy(pkt->entries[num_ships].name, "SHIP/Main");
-        }
 
         /* We're done with this ship, increment the counter */
         ++num_ships;
@@ -1029,7 +1029,7 @@ static int send_ship_list_pc(login_client_t *c, uint16_t menu_code) {
     void *result;
     char **row;
     uint32_t ship_id, players, priv;
-    int i, len = 0x30, gm_only, ship_num;
+    int i, len = 0x30, gm_only, ship_num, flags = 0x40;
     iconv_t ic = iconv_open("UTF-16LE", "UTF-8");
     size_t in, out;
     ICONV_CONST char *inptr;
@@ -1060,15 +1060,13 @@ static int send_ship_list_pc(login_client_t *c, uint16_t menu_code) {
 
     num_ships = 1;
 
+    if((c->ext_version & CLIENT_EXTVER_PCNTE))
+        flags = 0x1040;
+
     /* Get ready to query the database */
-    if(!(c->ext_version & CLIENT_EXTVER_PCNTE))
-        sprintf(query, "SELECT ship_id, name, players, gm_only, ship_number, "
-                "privileges FROM online_ships WHERE menu_code='%hu' AND "
-                "(flags & 0x40) = 0 ORDER BY ship_number", menu_code);
-    else
-        sprintf(query, "SELECT ship_id, name, players, gm_only, ship_number, "
-                "privileges FROM online_ships WHERE menu_code='%hu' AND "
-                "(flags & 0x1040) = 0 ORDER BY ship_number", menu_code);
+    sprintf(query, "SELECT ship_id, name, players, gm_only, ship_number, "
+            "privileges FROM online_ships WHERE menu_code='%hu' AND "
+            "(flags & 0x%04x) = 0 ORDER BY ship_number", menu_code, flags);
 
     /* Query the database and see what we've got */
     if(sylverant_db_query(&conn, query)) {
@@ -1105,13 +1103,11 @@ static int send_ship_list_pc(login_client_t *c, uint16_t menu_code) {
         pkt->entries[num_ships].flags = LE16(0x0F04);
 
         /* Create the name string (UTF-8) */
-        if(menu_code) {
+        if(menu_code)
             sprintf(tmp, "%02X:%c%c/%s", ship_num, (char)menu_code,
                     (char)(menu_code >> 8), row[1]);
-        }
-        else {
+        else
             sprintf(tmp, "%02X:%s", ship_num, row[1]);
-        }
 
         /* And convert to UTF-16 */
         in = strlen(tmp);
@@ -1128,8 +1124,16 @@ static int send_ship_list_pc(login_client_t *c, uint16_t menu_code) {
     sylverant_db_result_free(result);
 
     /* Figure out any lists we need to allow to be seen */
-    sprintf(query, "SELECT DISTINCT menu_code FROM online_ships ORDER BY "
-            "menu_code");
+    if(!IS_GLOBAL_GM(c)) {
+        sprintf(query, "SELECT DISTINCT menu_code FROM online_ships WHERE "
+                "(flags & 0x%02x) = 0 AND gm_only=0 AND "
+                "(privileges & 0x%08x) = privileges ORDER BY menu_code", flags,
+                c->priv);
+    }
+    else {
+        sprintf(query, "SELECT DISTINCT menu_code FROM online_ships WHERE "
+                "(flags & 0x%02x) = 0 ORDER BY menu_code", flags);
+    }
 
     /* Query the database and see what we've got */
     if(sylverant_db_query(&conn, query)) {
@@ -1148,18 +1152,16 @@ static int send_ship_list_pc(login_client_t *c, uint16_t menu_code) {
         ship_id = (uint16_t)strtoul(row[0], NULL, 0);
 
         /* Skip the entry we're filling in now */
-        if(ship_id == menu_code) {
+        if(ship_id == menu_code)
             continue;
-        }
 
         tmp2[0] = (char)(ship_id);
         tmp2[1] = (char)(ship_id >> 8);
         tmp2[2] = '\0';
 
         /* Make sure the values are in-bounds */
-        if((tmp2[0] || tmp2[1]) && (!isalpha(tmp2[0]) || !isalpha(tmp2[1]))) {
+        if((tmp2[0] || tmp2[1]) && (!isalpha(tmp2[0]) || !isalpha(tmp2[1])))
             continue;
-        }
 
         /* Clear out the ship information */
         memset(&pkt->entries[num_ships], 0, 0x2C);
@@ -1170,12 +1172,10 @@ static int send_ship_list_pc(login_client_t *c, uint16_t menu_code) {
         pkt->entries[num_ships].flags = LE16(0x0F04);
 
         /* Create the name string (UTF-8) */
-        if(tmp2[0] && tmp2[1]) {
+        if(tmp2[0] && tmp2[1])
             sprintf(tmp, "SHIP/%s", tmp2);
-        }
-        else {
+        else
             strcpy(tmp, "SHIP/Main");
-        }
 
         /* And convert to UTF-16 */
         in = strlen(tmp);
@@ -1303,13 +1303,11 @@ static int send_ship_list_bb(login_client_t *c, uint16_t menu_code) {
         pkt->entries[num_ships].flags = LE16(0x0F04);
 
         /* Create the name string (UTF-8) */
-        if(menu_code) {
+        if(menu_code)
             sprintf(tmp, "%02X:%c%c/%s", ship_num, (char)menu_code,
                     (char)(menu_code >> 8), row[1]);
-        }
-        else {
+        else
             sprintf(tmp, "%02X:%s", ship_num, row[1]);
-        }
 
         /* And convert to UTF-16 */
         in = strlen(tmp);
@@ -1326,8 +1324,16 @@ static int send_ship_list_bb(login_client_t *c, uint16_t menu_code) {
     sylverant_db_result_free(result);
 
     /* Figure out any lists we need to allow to be seen */
-    sprintf(query, "SELECT DISTINCT menu_code FROM online_ships ORDER BY "
-            "menu_code");
+    if(!IS_GLOBAL_GM(c)) {
+        sprintf(query, "SELECT DISTINCT menu_code FROM online_ships WHERE "
+                "(flags & 0x200) = 0 AND gm_only=0 AND "
+                "(privileges & 0x%08x) = privileges ORDER BY menu_code",
+                c->priv);
+    }
+    else {
+        sprintf(query, "SELECT DISTINCT menu_code FROM online_ships WHERE "
+                "(flags & 0x200) = 0 ORDER BY menu_code");
+    }
 
     /* Query the database and see what we've got */
     if(sylverant_db_query(&conn, query)) {
@@ -1346,18 +1352,16 @@ static int send_ship_list_bb(login_client_t *c, uint16_t menu_code) {
         ship_id = (uint16_t)strtoul(row[0], NULL, 0);
 
         /* Skip the entry we're filling in now */
-        if(ship_id == menu_code) {
+        if(ship_id == menu_code)
             continue;
-        }
 
         tmp2[0] = (char)(ship_id);
         tmp2[1] = (char)(ship_id >> 8);
         tmp2[2] = '\0';
 
         /* Make sure the values are in-bounds */
-        if((tmp2[0] || tmp2[1]) && (!isalpha(tmp2[0]) || !isalpha(tmp2[1]))) {
+        if((tmp2[0] || tmp2[1]) && (!isalpha(tmp2[0]) || !isalpha(tmp2[1])))
             continue;
-        }
 
         /* Clear out the ship information */
         memset(&pkt->entries[num_ships], 0, 0x2C);
@@ -1368,12 +1372,10 @@ static int send_ship_list_bb(login_client_t *c, uint16_t menu_code) {
         pkt->entries[num_ships].flags = LE16(0x0F04);
 
         /* Create the name string (UTF-8) */
-        if(tmp2[0] && tmp2[1]) {
+        if(tmp2[0] && tmp2[1])
             sprintf(tmp, "SHIP/%s", tmp2);
-        }
-        else {
+        else
             strcpy(tmp, "SHIP/Main");
-        }
 
         /* And convert to UTF-16 */
         in = strlen(tmp);
