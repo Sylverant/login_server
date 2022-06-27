@@ -1,7 +1,7 @@
 /*
     Sylverant Login Server
-    Copyright (C) 2009, 2010, 2011, 2013, 2015, 2017, 2018, 2019, 2020,
-                  2021 Lawrence Sebald
+    Copyright (C) 2009, 2010, 2011, 2013, 2015, 2017, 2018, 2019, 2020, 2021,
+                  2022 Lawrence Sebald
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License version 3
@@ -1303,7 +1303,7 @@ static int handle_xbloginc(login_client_t *c, xb_login_9c_pkt *pkt) {
 
 static int handle_xblogine(login_client_t *c, xb_login_9e_pkt *pkt) {
     uint32_t gc;
-    char query[256], xbluid[32];
+    char query[256], xbluid[32], xblgt[32];
     void *result;
     char **row;
     xbox_ip_t *ip = (xbox_ip_t *)pkt->sec_data;
@@ -1381,11 +1381,42 @@ static int handle_xblogine(login_client_t *c, xb_login_9e_pkt *pkt) {
         send_dc_security(c, gc, NULL, 0);
         return 0;
     }
+    else {
+        /* Temporary(?) workaround... */
+        sylverant_db_result_free(result);
+        sylverant_db_escape_str(&conn, xblgt, (const char *)pkt->xbl_gamertag,
+                                16);
 
-    sylverant_db_result_free(result);
+        /* Assign a nice fresh new guildcard number to the client. */
+        sprintf(query, "INSERT INTO guildcards (account_id) VALUES (NULL)");
 
-    /* If we get here, we didn't find them, bail out. */
-    return -1;
+        if(sylverant_db_query(&conn, query)) {
+            send_large_msg(c, __(c, "\tEInternal Server Error.\n"
+                                 "Please try again later."));
+            return -1;
+        }
+
+        /* Grab the new guildcard for the user. */
+        gc = (uint32_t)sylverant_db_insert_id(&conn);
+
+        /* Add the client into our database. */
+        sprintf(query, "INSERT INTO xbox_clients (guildcard, xbl_userid,"
+                "xbl_gamertag) VALUES ('%u', '%s', '%s')", gc, xbluid, xblgt);
+
+        if(sylverant_db_query(&conn, query)) {
+            send_large_msg(c, __(c, "\tEInternal Server Error.\n"
+                                 "Please try again later."));
+            return -1;
+        }
+
+        my_ntop(&c->ip_addr, ipstr);
+        debug(DBG_LOG, "Xbox Guildcard %" PRIu32 " connected from real IP %s\n",
+              gc, ipstr);
+
+        c->guildcard = gc;
+        send_dc_security(c, gc, NULL, 0);
+        return 0;
+    }
 }
 
 static int handle_logind(login_client_t *c, dcv2_login_9d_pkt *pkt) {
