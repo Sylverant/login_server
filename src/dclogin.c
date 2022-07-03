@@ -1151,7 +1151,7 @@ static int handle_gclogine(login_client_t *c, gc_login_9e_pkt *pkt) {
 /* The next few functions look the same pretty much... All added for xbox
    support. */
 static int handle_xbhlcheck(login_client_t *c, xb_hlcheck_pkt *pkt) {
-    uint32_t account, gc;
+    uint32_t gc;
     char query[256], xbluid[32];
     void *result;
     char **row;
@@ -1203,39 +1203,7 @@ static int handle_xbhlcheck(login_client_t *c, xb_hlcheck_pkt *pkt) {
             return -1;
         }
 
-        /* The client has at least registered, check if they are a GM. */
-        sprintf(query, "SELECT account_id FROM guildcards WHERE guildcard='%u'",
-                gc);
-
-        if(sylverant_db_query(&conn, query)) {
-            return send_simple(c, LOGIN_9A_TYPE, LOGIN_DB_CONN_ERROR);
-        }
-
-        result = sylverant_db_result_store(&conn);
-
-        if(!(row = sylverant_db_result_fetch(result))) {
-            return send_simple(c, LOGIN_9A_TYPE, LOGIN_DB_CONN_ERROR);
-        }
-
-        account = (uint32_t)strtoul(row[0], NULL, 0);
-        sylverant_db_result_free(result);
-
-        sprintf(query, "SELECT privlevel FROM account_data WHERE "
-                "account_id='%u'", account);
-
-        /* If we can't query the DB, fail. */
-        if(sylverant_db_query(&conn, query)) {
-            return send_simple(c, LOGIN_9A_TYPE, LOGIN_DB_CONN_ERROR);
-        }
-
-        result = sylverant_db_result_store(&conn);
-
-        if((row = sylverant_db_result_fetch(result))) {
-            c->priv = strtoul(row[0], NULL, 0);
-            return send_simple(c, LOGIN_9A_TYPE, LOGIN_DB_OK);
-        }
-
-        return send_simple(c, LOGIN_9A_TYPE, LOGIN_DB_CONN_ERROR);
+        return send_simple(c, LOGIN_9A_TYPE, LOGIN_DB_OK);
     }
     else {
         /* They aren't registered yet, so... Let's solve that. */
@@ -1335,7 +1303,8 @@ static int handle_xblogine(login_client_t *c, xb_login_9e_pkt *pkt) {
     /* Escape all the important strings. */
     sylverant_db_escape_str(&conn, xbluid, (const char *)pkt->xbl_userid, 16);
 
-    sprintf(query, "SELECT guildcard FROM xbox_clients WHERE "
+    sprintf(query, "SELECT guildcard, privlevel FROM xbox_clients NATURAL JOIN "
+            "guildcards NATURAL LEFT OUTER JOIN account_data WHERE "
             "xbl_userid='%s'", xbluid);
 
     /* If we can't query the database, fail. */
@@ -1347,8 +1316,14 @@ static int handle_xblogine(login_client_t *c, xb_login_9e_pkt *pkt) {
 
     /* Did we find them? */
     if((row = sylverant_db_result_fetch(result))) {
-        /* Grab the client's guildcard number. */
+        /* Grab the client's guildcard number and their privilege level if one
+           is set. */
         gc = (uint32_t)strtoul(row[0], NULL, 0);
+
+        if(row[1]) {
+            c->priv = (uint32_t)strtoul(row[1], NULL, 0);
+        }
+
         sylverant_db_result_free(result);
 
         my_ntop(&c->ip_addr, ipstr);
