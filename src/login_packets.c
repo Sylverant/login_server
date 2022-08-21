@@ -1,7 +1,7 @@
 /*
     Sylverant Login Server
-    Copyright (C) 2009, 2010, 2011, 2012, 2013, 2015, 2018, 2019, 2020,
-                  2021 Lawrence Sebald
+    Copyright (C) 2009, 2010, 2011, 2012, 2013, 2015, 2018, 2019, 2020, 2021,
+                  2022 Lawrence Sebald
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License version 3
@@ -2983,6 +2983,11 @@ static int send_patch_menu_dcgc(login_client_t *c) {
         for(j = 0; j < p->patchset_count; ++j) {
             /* Skip any GM-only patches for anyone who isn't a GM. */
             if(!IS_GLOBAL_GM(c) && p->gmonly)
+                continue;
+
+            /* Make sure they have the required permissions if any are required
+               by the patch. */
+            if(!(c->priv & p->perms) && !IS_GLOBAL_ROOT(c))
                 continue;
 
             if(p->patches[j]->version == c->det_version) {

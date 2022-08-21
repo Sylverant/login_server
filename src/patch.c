@@ -1,6 +1,6 @@
 /*
     Sylverant Login Server
-    Copyright (C) 2018 Lawrence Sebald
+    Copyright (C) 2018, 2022 Lawrence Sebald
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License version 3
@@ -182,7 +182,7 @@ out:
 }
 
 static int handle_patch(xmlNode *n, patch_list_t *l) {
-    xmlChar *id, *gmonly;
+    xmlChar *id, *gmonly, *perms;
     int rv = 0;
     uint32_t rid;
     patch_t *p;
@@ -223,11 +223,13 @@ static int handle_patch(xmlNode *n, patch_list_t *l) {
     /* Grab the attributes we're expecting. */
     id = xmlGetProp(n, XC"id");
     gmonly = xmlGetProp(n, XC"gmonly");
+    perms = xmlGetProp(n, XC"permissions");
 
     if(!id || !gmonly) {
         debug(DBG_ERROR, "patch tag missing attribute.\n");
-        xmlFree(id);
+        xmlFree(perms);
         xmlFree(gmonly);
+        xmlFree(id);
         free(p->desc);
         free(p->name);
         free(p);
@@ -240,8 +242,9 @@ static int handle_patch(xmlNode *n, patch_list_t *l) {
 
     if(errno) {
         debug(DBG_ERROR, "Invalid ID for patch: %s\n", (const char *)id);
-        xmlFree(id);
+        xmlFree(perms);
         xmlFree(gmonly);
+        xmlFree(id);
         free(p->desc);
         free(p->name);
         free(p);
@@ -260,6 +263,7 @@ static int handle_patch(xmlNode *n, patch_list_t *l) {
     }
     else {
         debug(DBG_ERROR, "Invalid value for gmonly for patch\n");
+        xmlFree(perms);
         xmlFree(gmonly);
         free(p->desc);
         free(p->name);
@@ -268,6 +272,24 @@ static int handle_patch(xmlNode *n, patch_list_t *l) {
     }
 
     xmlFree(gmonly);
+
+    if(perms != NULL) {
+        errno = 0;
+        rid = (uint32_t)strtoul((const char *)perms, NULL, 0);
+
+        if(errno) {
+            debug(DBG_ERROR, "Invalid pemisisons value for patch: %s\n",
+                  (const char *)perms);
+            xmlFree(perms);
+            free(p->desc);
+            free(p->name);
+            free(p);
+            return -18;
+        }
+
+        xmlFree(perms);
+        p->perms = rid;
+    }
 
     /* Now that we're done with that, deal with any children of the node */
     n = n->children;

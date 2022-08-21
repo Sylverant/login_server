@@ -1,6 +1,6 @@
 /*
     Sylverant Login Server
-    Copyright (C) 2018 Lawrence Sebald
+    Copyright (C) 2018, 2022 Lawrence Sebald
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License version 3
@@ -32,6 +32,7 @@ typedef struct patch {
     uint32_t patchset_count;
 
     int gmonly;
+    uint32_t perms;
 
     char **name;
     char **desc;
