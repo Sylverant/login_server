@@ -2987,7 +2987,7 @@ static int send_patch_menu_dcgc(login_client_t *c) {
 
             /* Make sure they have the required permissions if any are required
                by the patch. */
-            if(!(c->priv & p->perms) && !IS_GLOBAL_ROOT(c))
+            if(!IS_GLOBAL_ROOT(c) && (p->perms & c->priv) != p->perms)
                 continue;
 
             if(p->patches[j]->version == c->det_version) {
