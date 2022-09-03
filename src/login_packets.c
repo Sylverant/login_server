@@ -1717,7 +1717,7 @@ static int send_pc_quest_list(login_client_t *c,
 
     for(i = 0; i < l->quest_count; ++i) {
         /* Clear the entry */
-        memset(pkt->entries + entries, 0, 0x98);
+        memset(pkt->entries + entries, 0, 0x0128);
 
         /* Copy the category's information over to the packet */
         pkt->entries[entries].menu_id = LE32(0x00000004);
