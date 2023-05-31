@@ -1922,6 +1922,10 @@ int process_dclogin_packet(login_client_t *c, void *pkt) {
             /* XXXX: Hopefully nobody crashes, right? */
             return handle_patch_return(c, (patch_return_pkt *)pkt);
 
+        case PING_TYPE:
+            /* XXXX: The client sends these every so often. Just ignore them. */
+            return 0;
+
         default:
             print_packet((unsigned char *)pkt, len);
             return -3;
