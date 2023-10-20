@@ -337,15 +337,14 @@ static int handle_ntelogin(login_client_t *c, dcnte_login_88_pkt *pkt) {
 
 static int handle_ntelogin8a(login_client_t *c, dcnte_login_8a_pkt *pkt) {
     uint32_t gc;
-    char query[256], id[17], dc_id[64], serial[64], access[64];
+    char query[256], dc_id[17], serial[64], access[64];
     void *result;
     char **row;
     int banned;
     time_t banlen;
 
     /* Escape all the important strings. */
-    to_hexstring(id, pkt->dc_id, 8);
-    sylverant_db_escape_str(&conn, dc_id, id, 16);
+    to_hexstring(dc_id, pkt->dc_id, 8);
     sylverant_db_escape_str(&conn, serial, c->serial, 16);
     sylverant_db_escape_str(&conn, access, c->access_key, 16);
 
@@ -446,15 +445,14 @@ static int handle_ntelogin8a(login_client_t *c, dcnte_login_8a_pkt *pkt) {
 
 static int handle_ntelogin8b(login_client_t *c, dcnte_login_8b_pkt *pkt) {
     uint32_t gc;
-    char query[256], id[17], dc_id[64], serial[64], access[64];
+    char query[256], dc_id[17], serial[64], access[64];
     void *result;
     char **row;
     int banned;
     time_t banlen;
 
     /* Escape all the important strings. */
-    to_hexstring(id, pkt->dc_id, 8);
-    sylverant_db_escape_str(&conn, dc_id, id, 16);
+    to_hexstring(dc_id, pkt->dc_id, 8);
     sylverant_db_escape_str(&conn, serial, pkt->serial, 16);
     sylverant_db_escape_str(&conn, access, pkt->access_key, 16);
 
