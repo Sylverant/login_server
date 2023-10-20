@@ -1,7 +1,7 @@
 /*
     Sylverant Login Server
     Copyright (C) 2009, 2010, 2011, 2013, 2015, 2017, 2018, 2019, 2020, 2021,
-                  2022 Lawrence Sebald
+                  2022, 2023 Lawrence Sebald
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License version 3
@@ -267,6 +267,20 @@ static int keycheck(char serial[8], char ak[8]) {
     return 0;
 }
 
+/* out must have space for at least 2 * len + 1 characters. */
+static void to_hexstring(char *out, const uint8_t *in, size_t len) {
+    size_t i;
+    uint8_t val;
+
+    for(i = 0; i < len; ++i) {
+        val = *in++;
+        *out++ = ((val & 0xf0) < 0xa0) ? (val >> 4) + 0x30 : (val >> 4) + 0x57;
+        *out++ = ((val & 0xf) < 0xa) ? (val & 0xf) + 0x30 : (val & 0xf) + 0x57;
+    }
+
+    *out++ = 0;
+}
+
 /* Handle a client's login request packet. */
 static int handle_ntelogin(login_client_t *c, dcnte_login_88_pkt *pkt) {
     char query[256], serial[64], access[64];
@@ -323,14 +337,15 @@ static int handle_ntelogin(login_client_t *c, dcnte_login_88_pkt *pkt) {
 
 static int handle_ntelogin8a(login_client_t *c, dcnte_login_8a_pkt *pkt) {
     uint32_t gc;
-    char query[256], dc_id[32], serial[64], access[64];
+    char query[256], id[17], dc_id[64], serial[64], access[64];
     void *result;
     char **row;
     int banned;
     time_t banlen;
 
     /* Escape all the important strings. */
-    sylverant_db_escape_str(&conn, dc_id, pkt->dc_id, 8);
+    to_hexstring(id, pkt->dc_id, 8);
+    sylverant_db_escape_str(&conn, dc_id, id, 16);
     sylverant_db_escape_str(&conn, serial, c->serial, 16);
     sylverant_db_escape_str(&conn, access, c->access_key, 16);
 
@@ -431,14 +446,15 @@ static int handle_ntelogin8a(login_client_t *c, dcnte_login_8a_pkt *pkt) {
 
 static int handle_ntelogin8b(login_client_t *c, dcnte_login_8b_pkt *pkt) {
     uint32_t gc;
-    char query[256], dc_id[32], serial[64], access[64];
+    char query[256], id[17], dc_id[64], serial[64], access[64];
     void *result;
     char **row;
     int banned;
     time_t banlen;
 
     /* Escape all the important strings. */
-    sylverant_db_escape_str(&conn, dc_id, (char *)pkt->dc_id, 8);
+    to_hexstring(id, pkt->dc_id, 8);
+    sylverant_db_escape_str(&conn, dc_id, id, 16);
     sylverant_db_escape_str(&conn, serial, pkt->serial, 16);
     sylverant_db_escape_str(&conn, access, pkt->access_key, 16);
 
