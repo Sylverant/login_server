@@ -28,7 +28,7 @@
 #include <sylverant/debug.h>
 #include <sylverant/database.h>
 #include <sylverant/quest.h>
-#include <sylverant/md5.h>
+#include <sylverant/utils.h>
 #include <sylverant/items.h>
 
 #include "login.h"
