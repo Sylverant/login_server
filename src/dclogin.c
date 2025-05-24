@@ -1,7 +1,7 @@
 /*
     Sylverant Login Server
     Copyright (C) 2009, 2010, 2011, 2013, 2015, 2017, 2018, 2019, 2020, 2021,
-                  2022, 2023 Lawrence Sebald
+                  2022, 2023, 2025 Lawrence Sebald
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License version 3
