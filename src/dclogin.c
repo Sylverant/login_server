@@ -120,6 +120,8 @@ static int is_ip_banned(login_client_t *c, time_t *until, char *reason) {
 
     /* XXXX: Need IPv6 bans too! */
     if(c->is_ipv6) {
+        debug(DBG_WARN, "Cannot check if user (%" PRIu32 ") is banned by IP: "
+                        "connected by IPv6.\n", c->guildcard);
         return 0;
     }
 
@@ -131,6 +133,8 @@ static int is_ip_banned(login_client_t *c, time_t *until, char *reason) {
 
     /* If we can't query the database, fail. */
     if(sylverant_db_query(&conn, query)) {
+        debug(DBG_WARN, "Cannot check if user (%" PRIu32 ") is banned by IP: "
+                        "error querying db.\n", c->guildcard);
         return -1;
     }
 
@@ -142,6 +146,9 @@ static int is_ip_banned(login_client_t *c, time_t *until, char *reason) {
         rv = 1;
         *until = (time_t)strtoul(row[0], NULL, 0);
         strcpy(reason, row[1]);
+
+        debug(DBG_LOG, "User %" PRIu32 " is banned by IP address: %s\n",
+              c->guildcard, row[1]);
     }
 
     sylverant_db_result_free(result);
@@ -163,6 +170,8 @@ static int is_gc_banned(uint32_t gc, time_t *until, char *reason) {
 
     /* If we can't query the database, fail. */
     if(sylverant_db_query(&conn, query)) {
+        debug(DBG_WARN, "Cannot check if user (%" PRIu32 ") is banned by gc: "
+                        "error querying db.\n", gc);
         return -1;
     }
 
@@ -174,6 +183,9 @@ static int is_gc_banned(uint32_t gc, time_t *until, char *reason) {
         rv = 1;
         *until = (time_t)strtoul(row[0], NULL, 0);
         strcpy(reason, row[1]);
+
+        debug(DBG_LOG, "User %" PRIu32 " is banned by guild card: %s\n", gc,
+              row[1]);
     }
 
     sylverant_db_result_free(result);
@@ -945,11 +957,13 @@ static int handle_gchlcheck(login_client_t *c, gc_hlcheck_pkt *pkt) {
 
     /* Make sure the user isn't IP banned. */
     if(banned == -1) {
-        return send_simple(c, LOGIN_9A_TYPE, LOGIN_DB_CONN_ERROR);
+        send_simple(c, LOGIN_9A_TYPE, LOGIN_DB_CONN_ERROR);
+        return -1;
     }
     else if(banned) {
         send_ban_msg(c, banlen, query);
-        return send_simple(c, LOGIN_9A_TYPE, LOGIN_DB_SUSPENDED);
+        send_simple(c, LOGIN_9A_TYPE, LOGIN_DB_SUSPENDED);
+        return -1;
     }
 
     /* Escape all the important strings. */
@@ -974,18 +988,21 @@ static int handle_gchlcheck(login_client_t *c, gc_hlcheck_pkt *pkt) {
         banned = is_gc_banned(gc, &banlen, query);
 
         if(banned == -1) {
-            return send_simple(c, LOGIN_9A_TYPE, LOGIN_DB_CONN_ERROR);
+            send_simple(c, LOGIN_9A_TYPE, LOGIN_DB_CONN_ERROR);
+            return -1;
         }
         else if(banned) {
             send_ban_msg(c, banlen, query);
-            return send_simple(c, LOGIN_9A_TYPE, LOGIN_DB_SUSPENDED);
+            send_simple(c, LOGIN_9A_TYPE, LOGIN_DB_SUSPENDED);
+            return -1;
         }
 
         /* Make sure the guildcard isn't online already. */
         banned = is_gc_online(gc);
 
         if(banned == -1) {
-            return send_simple(c, LOGIN_9A_TYPE, LOGIN_DB_CONN_ERROR);
+            send_simple(c, LOGIN_9A_TYPE, LOGIN_DB_CONN_ERROR);
+            return -1;
         }
         else if(banned) {
             send_large_msg(c, __(c, "\tEYour guildcard is already online."));
@@ -998,13 +1015,15 @@ static int handle_gchlcheck(login_client_t *c, gc_hlcheck_pkt *pkt) {
                 gc);
 
         if(sylverant_db_query(&conn, query)) {
-            return send_simple(c, LOGIN_9A_TYPE, LOGIN_DB_CONN_ERROR);
+            send_simple(c, LOGIN_9A_TYPE, LOGIN_DB_CONN_ERROR);
+            return -1;
         }
 
         result = sylverant_db_result_store(&conn);
 
         if(!(row = sylverant_db_result_fetch(result))) {
-            return send_simple(c, LOGIN_9A_TYPE, LOGIN_DB_CONN_ERROR);
+            send_simple(c, LOGIN_9A_TYPE, LOGIN_DB_CONN_ERROR);
+            return -1;
         }
 
         account = (uint32_t)strtoul(row[0], NULL, 0);
@@ -1015,7 +1034,8 @@ static int handle_gchlcheck(login_client_t *c, gc_hlcheck_pkt *pkt) {
 
         /* If we can't query the DB, fail. */
         if(sylverant_db_query(&conn, query)) {
-            return send_simple(c, LOGIN_9A_TYPE, LOGIN_DB_CONN_ERROR);
+            send_simple(c, LOGIN_9A_TYPE, LOGIN_DB_CONN_ERROR);
+            return -1;
         }
 
         result = sylverant_db_result_store(&conn);
@@ -1029,7 +1049,8 @@ static int handle_gchlcheck(login_client_t *c, gc_hlcheck_pkt *pkt) {
     sylverant_db_result_free(result);
 
     /* If we get here, we didn't find them, bail out. */
-    return send_simple(c, LOGIN_9A_TYPE, LOGIN_DB_NO_HL);
+    send_simple(c, LOGIN_9A_TYPE, LOGIN_DB_NO_HL);
+    return -1;
 }
 
 static int handle_gcloginc(login_client_t *c, gc_login_9c_pkt *pkt) {
@@ -1106,7 +1127,8 @@ static int handle_gcloginc(login_client_t *c, gc_login_9c_pkt *pkt) {
                 return send_simple(c, LOGIN_9C_TYPE, LOGIN_9CGC_OK);
             }
             else {
-                return send_simple(c, LOGIN_9C_TYPE, LOGIN_9CGC_BAD_PWD);
+                send_simple(c, LOGIN_9C_TYPE, LOGIN_9CGC_BAD_PWD);
+                return -1;
             }
         }
     }
