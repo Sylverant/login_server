@@ -427,7 +427,9 @@ static int handle_ntelogin8a(login_client_t *c, dcnte_login_8a_pkt *pkt) {
         return -1;
     }
     else if(banned) {
-        send_large_msg(c, __(c, "\tEYour guildcard is already online."));
+        send_large_msg(c, __(c, "\tEYour guildcard is already online.\n"
+                             "Please wait five minutes and try to\n"
+                             "connect again."));
         return -1;
     }
 
@@ -515,7 +517,9 @@ static int handle_ntelogin8b(login_client_t *c, dcnte_login_8b_pkt *pkt) {
         return -1;
     }
     else if(banned) {
-        send_large_msg(c, __(c, "\tEYour guildcard is already online."));
+        send_large_msg(c, __(c, "\tEYour guildcard is already online.\n"
+                             "Please wait five minutes and try to\n"
+                             "connect again."));
         return -1;
     }
 
@@ -686,7 +690,9 @@ static int handle_login3(login_client_t *c, dc_login_93_pkt *pkt) {
         return -1;
     }
     else if(banned) {
-        send_large_msg(c, __(c, "\tEYour guildcard is already online."));
+        send_large_msg(c, __(c, "\tEYour guildcard is already online.\n"
+                             "Please wait five minutes and try to\n"
+                             "connect again."));
         return -1;
     }
 
@@ -832,7 +838,9 @@ static int handle_logina(login_client_t *c, dcv2_login_9a_pkt *pkt) {
             return send_simple(c, LOGIN_9A_TYPE, LOGIN_9A_ERROR);
         }
         else if(banned) {
-            send_large_msg(c, __(c, "\tEYour guildcard is already online."));
+            send_large_msg(c, __(c, "\tEYour guildcard is already online.\n"
+                                 "Please wait five minutes and try to\n"
+                                 "connect again."));
             return -1;
         }
 
@@ -1005,7 +1013,9 @@ static int handle_gchlcheck(login_client_t *c, gc_hlcheck_pkt *pkt) {
             return -1;
         }
         else if(banned) {
-            send_large_msg(c, __(c, "\tEYour guildcard is already online."));
+            send_large_msg(c, __(c, "\tEYour guildcard is already online.\n"
+                                 "Please wait five minutes and try to\n"
+                                 "connect again."));
             return -1;
         }
 
@@ -1235,7 +1245,9 @@ static int handle_xbhlcheck(login_client_t *c, xb_hlcheck_pkt *pkt) {
             return send_simple(c, LOGIN_9A_TYPE, LOGIN_DB_CONN_ERROR);
         }
         else if(banned) {
-            send_large_msg(c, __(c, "\tEYour guildcard is already online."));
+            send_large_msg(c, __(c, "\tEYour guildcard is already online.\n"
+                                 "Please wait five minutes and try to\n"
+                                 "connect again."));
             return -1;
         }
 
@@ -1384,7 +1396,9 @@ static int handle_xblogine(login_client_t *c, xb_login_9e_pkt *pkt) {
             return send_simple(c, LOGIN_9A_TYPE, LOGIN_DB_CONN_ERROR);
         }
         else if(banned) {
-            send_large_msg(c, __(c, "\tEYour guildcard is already online."));
+            send_large_msg(c, __(c, "\tEYour guildcard is already online.\n"
+                                 "Please wait five minutes and try to\n"
+                                 "connect again."));
             return -1;
         }
 
