@@ -1,7 +1,7 @@
 /*
     Sylverant Login Server
     Copyright (C) 2009, 2010, 2011, 2013, 2015, 2017, 2018, 2019, 2020, 2021,
-                  2022, 2023, 2025 Lawrence Sebald
+                  2022, 2023, 2025, 2026 Lawrence Sebald
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License version 3
@@ -1925,10 +1925,19 @@ int process_dclogin_packet(login_client_t *c, void *pkt) {
 
         case LOGIN_9E_TYPE:
             /* XXXX: One final check, and give them their guildcard. */
-            if(c->type != CLIENT_TYPE_XBOX)
-                return handle_gclogine(c, (gc_login_9e_pkt *)pkt);
-            else
-                return handle_xblogine(c, (xb_login_9e_pkt *)pkt);
+            switch(c->type) {
+                case CLIENT_TYPE_GC:
+                    return handle_gclogine(c, (gc_login_9e_pkt *)pkt);
+
+                case CLIENT_TYPE_XBOX:
+                    return handle_xblogine(c, (xb_login_9e_pkt *)pkt);
+
+                case CLIENT_TYPE_PC:
+                    return handle_logind(c, (dcv2_login_9d_pkt *)pkt);
+
+                default:
+                    return -1;
+            }
 
         case LOGIN_9D_TYPE:
             /* XXXX: All this work for a language and version code... */

@@ -1,7 +1,7 @@
 /*
     Sylverant Login Server
     Copyright (C) 2009, 2010, 2011, 2012, 2013, 2014, 2015, 2018, 2020,
-                  2021 Lawrence Sebald
+                  2021, 2026 Lawrence Sebald
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License version 3
@@ -222,6 +222,8 @@ typedef struct dcv2_login_9d {
     uint8_t padding7[14];
     uint8_t sec_data[0];
 } PACKED dcv2_login_9d_pkt;
+
+typedef struct dcv2_login_9d PACKED pc_login_9e_pkt;
 
 typedef struct gc_login_9e {
     dc_pkt_hdr_t hdr;
